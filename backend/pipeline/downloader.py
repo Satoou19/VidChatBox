@@ -8,6 +8,32 @@ class VideoDownloader:
         self.audio_dir = os.path.join(data_dir, "audio")
         os.makedirs(self.audio_dir, exist_ok=True)
 
+    def _get_cookiefile_path(self):
+        """Checks for cookies.txt file or writes YOUTUBE_COOKIES env var to a temp file if available.
+        
+        Returns the path to the cookies file, or None.
+        """
+        env_cookies = os.getenv("YOUTUBE_COOKIES")
+        if env_cookies:
+            cookies_path = os.path.join(self.data_dir, "cookies.txt")
+            try:
+                normalized_cookies = env_cookies.replace("\\n", "\n")
+                with open(cookies_path, "w", encoding="utf-8") as f:
+                    f.write(normalized_cookies)
+                return cookies_path
+            except Exception as e:
+                print(f"Warning: Failed to write YOUTUBE_COOKIES to file: {e}")
+                
+        local_path = "./cookies.txt"
+        if os.path.exists(local_path):
+            return local_path
+            
+        data_path = os.path.join(self.data_dir, "cookies.txt")
+        if os.path.exists(data_path):
+            return data_path
+            
+        return None
+
     def download_subtitles(self, url, progress_callback=None):
         """Downloads subtitles/auto-captions from YouTube.
         
@@ -77,6 +103,10 @@ class VideoDownloader:
             'no_warnings': True,
         }
         
+        cookie_file = self._get_cookiefile_path()
+        if cookie_file:
+            ydl_opts['cookiefile'] = cookie_file
+            
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 if progress_callback:
@@ -170,6 +200,10 @@ class VideoDownloader:
             'quiet': True,
             'no_warnings': True,
         }
+        cookie_file = self._get_cookiefile_path()
+        if cookie_file:
+            ydl_opts['cookiefile'] = cookie_file
+            
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(url, download=False)
@@ -222,6 +256,10 @@ class VideoDownloader:
             'no_warnings': True,
         }
         
+        cookie_file = self._get_cookiefile_path()
+        if cookie_file:
+            ydl_opts['cookiefile'] = cookie_file
+            
         # Note: If FFmpeg was available we could do postprocessors, but we intentionally avoid
         # forcing FFmpeg so that raw m4a/webm works fine.
 
