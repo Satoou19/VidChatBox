@@ -4,6 +4,17 @@
 
 It allows you to paste YouTube URLs, extract official transcripts or auto-captions, save them into local vector indexes, and chat with them using multiple AI providers—offering timestamped source citations and interactive streamer personas.
 
+## Screenshots 📸
+
+### Main Workspace
+![Main Landing Workspace](screenshots/main_landing.png)
+
+### Dynamic Ingest Modal
+![Ingest VOD Modal](screenshots/ingest_modal.png)
+
+### API Settings & Locked Engines State
+![API Settings Modal](screenshots/settings_modal.png)
+
 ---
 
 ## Key Features 🚀
