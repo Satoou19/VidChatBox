@@ -340,7 +340,7 @@ def api_delete_project(project_id: str):
 # Ingestion endpoints
 @app.post("/api/ingest")
 def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
-    """Enqueues VOD ingestion in the background."""
+    """Enqueues VID ingestion in the background."""
     if not req.url:
         raise HTTPException(status_code=400, detail="URL cannot be empty")
         
@@ -616,7 +616,7 @@ def export_video_markdown(video_id: str, project_id: str = "default", use_ai: bo
 
 @app.get("/api/projects/{project_id}/export-batch")
 def export_project_batch(project_id: str):
-    """Generates a ZIP archive containing all VOD transcripts in the project formatted as Markdown."""
+    """Generates a ZIP archive containing all VID transcripts in the project formatted as Markdown."""
     import io
     import zipfile
     
@@ -762,7 +762,7 @@ def run_chat(
     if not search_results:
         # Return static streaming response indicating no data found
         def empty_generator():
-            yield "I don't have any streamer VOD data indexed in this project yet! Please ingest some video URLs first using the Ingest VOD tab."
+            yield "I don't have any streamer VID data indexed in this group yet! Please ingest some video URLs first using the Ingest VIDs tab."
         return StreamingResponse(empty_generator(), media_type="text/plain")
 
     # Generate and stream Chat response with user custom keys

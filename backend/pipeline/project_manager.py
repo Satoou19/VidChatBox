@@ -81,7 +81,7 @@ def generate_markdown(video_metadata: Dict[str, Any], segments: List[Dict[str, A
     md.append("")
     md.append(f"- **Uploader**: {uploader}")
     if url:
-        md.append(f"- **Original VOD**: [Watch on YouTube]({url})")
+        md.append(f"- **Original VID**: [Watch on YouTube]({url})")
     md.append(f"- **Duration**: {duration_str}")
     md.append("")
     md.append("---")

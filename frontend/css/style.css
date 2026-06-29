@@ -97,8 +97,8 @@ body {
     -webkit-text-fill-color: transparent;
 }
 
-/* Project selector widget inside sidebar */
-.project-manager-widget {
+/* Group Selector Area (Sleek workspace manager) */
+.group-manager-widget {
     padding: 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     display: flex;
@@ -114,10 +114,181 @@ body {
     font-weight: 700;
 }
 
-.project-selector-area {
+.widget-header-row {
     display: flex;
-    gap: 0.4rem;
+    justify-content: space-between;
     align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.btn-add-group-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-smooth);
+}
+
+.btn-add-group-toggle:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Inline Creator Form */
+.inline-group-form {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0;
+    margin-bottom: 0.25rem;
+    animation: slideDownGroup 0.2s ease-out forwards;
+}
+
+@keyframes slideDownGroup {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.inline-group-form.hidden {
+    display: none;
+}
+
+.inline-group-form input {
+    flex: 1;
+    background-color: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 0.35rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    outline: none;
+    transition: var(--transition-smooth);
+}
+
+.inline-group-form input:focus {
+    border-color: var(--accent-blue);
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.inline-group-actions {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.btn-inline-save, .btn-inline-cancel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 0.35rem;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: var(--transition-smooth);
+}
+
+.btn-inline-save {
+    color: var(--text-success);
+}
+.btn-inline-save:hover {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-color: var(--text-success);
+}
+
+.btn-inline-cancel {
+    color: var(--text-error);
+}
+.btn-inline-cancel:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-color: var(--text-error);
+}
+
+/* Group list and items */
+.group-list-wrapper {
+    overflow-y: auto;
+    max-height: 180px;
+    padding-right: 2px;
+}
+
+.group-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.group-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.35rem;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    border: 1px solid transparent;
+}
+
+.group-item:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.group-item.active {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(14, 165, 233, 0.1) 100%);
+    border-color: rgba(14, 165, 233, 0.2);
+    color: white;
+}
+
+.group-item-clickable {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    overflow: hidden;
+}
+
+.group-icon {
+    font-size: 0.85rem;
+}
+
+.group-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-item.active .group-name {
+    font-weight: 600;
+}
+
+.btn-delete-group {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: var(--transition-smooth);
+}
+
+.group-item:hover .btn-delete-group {
+    opacity: 1;
+}
+
+.btn-delete-group:hover {
+    color: var(--text-error);
+    background-color: rgba(239, 68, 68, 0.15);
 }
 
 .custom-select {
@@ -152,37 +323,7 @@ body {
     flex: 1;
 }
 
-.btn-secondary-icon, .btn-danger-icon {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    padding: 0.45rem;
-    height: 34px;
-    width: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.5rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: var(--transition-smooth);
-}
-
-.btn-secondary-icon:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: var(--accent-blue);
-}
-
-.btn-danger-icon {
-    color: var(--text-error);
-    background: rgba(239, 68, 68, 0.05);
-    border: 1px solid rgba(239, 68, 68, 0.1);
-}
-
-.btn-danger-icon:hover {
-    background: rgba(239, 68, 68, 0.15);
-    border-color: var(--text-error);
-}
+/* Deprecated project selector buttons */
 
 /* Sidebar Trigger and Actions */
 .sidebar-action-area {

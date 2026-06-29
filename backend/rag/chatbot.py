@@ -71,9 +71,9 @@ class RAGChatbot:
         of the streamer (using context as 'my memories/opinions').
         """
         base_prompt = (
-            "You are a helpful AI assistant for VidChatBox, an application that queries VOD transcripts. "
-            "Your answers must be based ONLY on the provided VOD transcript segments. "
-            "If the provided context does not contain the answer, say honestly that you cannot find this information in the streamer's VODs. "
+            "You are a helpful AI assistant for VidChatBox, an application that queries VID transcripts. "
+            "Your answers must be based ONLY on the provided VID transcript segments. "
+            "If the provided context does not contain the answer, say honestly that you cannot find this information in the streamer's VIDs. "
             "Never invent or assume facts outside the provided context.\n\n"
             "CRITICAL CITATION RULES:\n"
             "1. You MUST cite your source using a direct markdown link with the format: `[HH:MM:SS](URL_WITH_TIMESTAMP)`.\n"
@@ -97,7 +97,7 @@ class RAGChatbot:
     def chat_stream(self, query, search_results, provider="gemini", model="", persona_mode="streamer"):
         """Streams chatbot responses using Gemini, OpenAI, Groq, DeepSeek, or OpenRouter."""
         # 1. Format the context
-        context_str = "--- CONTEXT SEGMENTS FROM VOD TRANSCRIPTS ---\n"
+        context_str = "--- CONTEXT SEGMENTS FROM VID TRANSCRIPTS ---\n"
         for i, chunk in enumerate(search_results):
             start_fmt = self.format_timestamp(chunk["start"])
             end_fmt = self.format_timestamp(chunk["end"])

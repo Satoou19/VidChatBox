@@ -49,10 +49,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const typingIndicator = document.getElementById("typing-indicator");
     const btnSend = document.getElementById("btn-send");
 
-    // Project Manager Elements
-    const projectSelect = document.getElementById("project-select");
-    const btnAddProject = document.getElementById("btn-add-project");
-    const btnDeleteProject = document.getElementById("btn-delete-project");
+    // Group Manager Elements
+    const groupList = document.getElementById("group-list");
+    const btnAddGroupToggle = document.getElementById("btn-add-group-toggle");
+    const inlineGroupForm = document.getElementById("inline-group-form");
+    const inlineGroupName = document.getElementById("inline-group-name");
+    const btnInlineGroupSave = document.getElementById("btn-inline-group-save");
+    const btnInlineGroupCancel = document.getElementById("btn-inline-group-cancel");
 
     // Floating Progress Widget Elements
     const progressWidget = document.getElementById("progress-widget");
@@ -475,14 +478,14 @@ document.addEventListener("DOMContentLoaded", () => {
             widgetOverallStatus.style.color = "var(--text-error)";
             btnWidgetClose.classList.remove("hidden");
         } else {
-            widgetOverallStatus.textContent = `Ingesting VODs (${data.completed_videos || 0}/${data.total_videos || 1})`;
+            widgetOverallStatus.textContent = `Ingesting VIDs (${data.completed_videos || 0}/${data.total_videos || 1})`;
             widgetOverallStatus.style.color = "var(--text-primary)";
             btnWidgetClose.classList.add("hidden");
         }
         
-        // Active VOD Subtitle text
+        // Active VID Subtitle text
         if (data.current_video_title) {
-            widgetActiveTitle.textContent = `Active VOD: ${data.current_video_title}`;
+            widgetActiveTitle.textContent = `Active VID: ${data.current_video_title}`;
         } else {
             widgetActiveTitle.textContent = "Active: Initializing...";
         }
@@ -705,93 +708,157 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadProjects() {
         try {
             const response = await fetch(`${API_BASE}/api/projects`);
-            if (!response.ok) throw new Error("Failed to load projects list");
+            if (!response.ok) throw new Error("Failed to load groups list");
             const projects = await response.json();
             
-            projectSelect.innerHTML = "";
+            groupList.innerHTML = "";
             projects.forEach(proj => {
-                const opt = document.createElement("option");
-                opt.value = proj;
-                opt.textContent = proj;
-                if (proj === currentProjectId) {
-                    opt.selected = true;
+                const li = document.createElement("li");
+                li.className = `group-item${proj === currentProjectId ? ' active' : ''}`;
+                li.setAttribute("data-id", proj);
+                
+                li.innerHTML = `
+                    <div class="group-item-clickable">
+                        <span class="group-icon">📁</span>
+                        <span class="group-name" title="${escapeHtml(proj)}">${escapeHtml(proj)}</span>
+                    </div>
+                    ${proj !== 'default' ? `
+                        <button type="button" class="btn-delete-group" data-id="${escapeHtml(proj)}" title="Delete Group">🗑️</button>
+                    ` : ''}
+                `;
+                
+                // Clicking the group name selects it
+                li.querySelector(".group-item-clickable").addEventListener("click", () => {
+                    selectGroup(proj);
+                });
+                
+                // Wire up delete button if present
+                const btnDel = li.querySelector(".btn-delete-group");
+                if (btnDel) {
+                    btnDel.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        deleteGroup(proj);
+                    });
                 }
-                projectSelect.appendChild(opt);
+                
+                groupList.appendChild(li);
             });
             
             if (!projects.includes(currentProjectId)) {
                 currentProjectId = projects[0] || "default";
-                projectSelect.value = currentProjectId;
             }
             
-            // Sync project header title
+            // Sync group header title
             activeProjectName.textContent = currentProjectId;
             
             loadChatHistory();
             loadVideos();
         } catch (err) {
-            console.error("Error loading projects: ", err);
+            console.error("Error loading groups: ", err);
         }
     }
 
-    projectSelect.addEventListener("change", (e) => {
-        currentProjectId = e.target.value;
+    function selectGroup(groupId) {
+        if (currentProjectId === groupId) return;
+        currentProjectId = groupId;
         activeProjectName.textContent = currentProjectId;
+        
+        // Update active class in list UI
+        const items = groupList.querySelectorAll(".group-item");
+        items.forEach(item => {
+            if (item.getAttribute("data-id") === groupId) {
+                item.classList.add("active");
+            } else {
+                item.classList.remove("active");
+            }
+        });
         
         loadChatHistory();
         loadVideos();
+    }
+
+    // Inline Group Creator Toggle
+    btnAddGroupToggle.addEventListener("click", () => {
+        inlineGroupForm.classList.toggle("hidden");
+        if (!inlineGroupForm.classList.contains("hidden")) {
+            inlineGroupName.value = "";
+            inlineGroupName.focus();
+        }
     });
 
-    // Create project handler
-    btnAddProject.addEventListener("click", async () => {
-        const name = prompt("Enter new project workspace name:");
+    btnInlineGroupCancel.addEventListener("click", () => {
+        inlineGroupForm.classList.add("hidden");
+        inlineGroupName.value = "";
+    });
+
+    // Keydown check for inline creator input
+    inlineGroupName.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            saveGroup();
+        } else if (e.key === "Escape") {
+            inlineGroupForm.classList.add("hidden");
+            inlineGroupName.value = "";
+        }
+    });
+
+    btnInlineGroupSave.addEventListener("click", () => {
+        saveGroup();
+    });
+
+    async function saveGroup() {
+        const name = inlineGroupName.value.trim();
         if (!name) return;
-        const cleanedName = name.trim();
-        if (!cleanedName) return;
         
         try {
             const response = await fetch(`${API_BASE}/api/projects`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: cleanedName })
+                body: JSON.stringify({ name: name })
             });
             
             if (!response.ok) {
-                throw new Error(await getErrorMessage(response, "Failed to create project"));
+                throw new Error(await getErrorMessage(response, "Failed to create group"));
             }
             
             const data = await response.json();
             currentProjectId = data.project_id;
             
+            // Reset & hide creator
+            inlineGroupForm.classList.add("hidden");
+            inlineGroupName.value = "";
+            
             loadChatHistory();
             await loadProjects();
         } catch (err) {
             alert("Error: " + err.message);
         }
-    });
+    }
 
-    // Delete project handler
-    btnDeleteProject.addEventListener("click", async () => {
-        if (currentProjectId === "default") {
-            if (!confirm("Are you sure you want to clear the default project? All its knowledge files will be wiped.")) return;
-        } else {
-            if (!confirm(`Are you sure you want to delete the project '${currentProjectId}' and all its data? This cannot be undone.`)) return;
-        }
+    // Delete group handler
+    async function deleteGroup(projId) {
+        const confirmMsg = projId === "default" 
+            ? "Are you sure you want to clear the default group? All its knowledge files will be wiped."
+            : `Are you sure you want to delete the group '${projId}' and all its data? This cannot be undone.`;
+            
+        if (!confirm(confirmMsg)) return;
         
         try {
-            const response = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(currentProjectId)}`, {
+            const response = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projId)}`, {
                 method: "DELETE"
             });
             
-            if (!response.ok) throw new Error("Failed to delete project");
+            if (!response.ok) throw new Error("Failed to delete group");
             
-            currentProjectId = "default";
+            if (currentProjectId === projId) {
+                currentProjectId = "default";
+            }
             loadChatHistory();
             await loadProjects();
         } catch (err) {
             alert("Error: " + err.message);
         }
-    });
+    }
 
     // Reset Chat messages log (keeps only welcome screen)
     function resetChatLog() {
@@ -874,7 +941,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Delete All VODs in project knowledge base
+    // Delete All VIDs in project knowledge base
     const btnDeleteAllVideos = document.getElementById("btn-delete-all-videos");
     if (btnDeleteAllVideos) {
         btnDeleteAllVideos.addEventListener("click", async () => {
@@ -913,7 +980,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const videos = await response.json();
             
             // Sync count display
-            videoCount.textContent = `${videos.length} VOD${videos.length === 1 ? '' : 's'}`;
+            videoCount.textContent = `${videos.length} VID${videos.length === 1 ? '' : 's'}`;
             
             // Clear existing list items (except welcome/empty messages)
             const oldItems = videoList.querySelectorAll(".video-item");
@@ -921,7 +988,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (videos.length === 0) {
                 emptyVideosMsg.classList.remove("hidden");
-                emptyVideosMsg.textContent = "No VODs ingested yet. Click 'Ingest VODs' above!";
+                emptyVideosMsg.textContent = "No VIDs ingested yet. Click 'Ingest VIDs' above!";
                 return;
             }
             
@@ -938,8 +1005,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         <h4 title="${escapeHtml(video.title)}">${escapeHtml(video.title)}</h4>
                     </div>
                     <div class="video-item-actions">
-                        <a href="${video.url}" class="video-item-link" target="_blank" title="Watch Original VOD">
-                            Original VOD 🔗
+                        <a href="${video.url}" class="video-item-link" target="_blank" title="Watch Original VID">
+                            Original VID 🔗
                         </a>
                         <div class="export-buttons-group">
                             <button class="btn-export-md" data-id="${video.id}" title="Export Raw Transcript to Markdown">
@@ -984,12 +1051,12 @@ document.addEventListener("DOMContentLoaded", () => {
         // Empty message handler on search mismatch
         const visibleItems = videoList.querySelectorAll(".video-item:not(.hidden)");
         if (visibleItems.length === 0 && items.length > 0) {
-            emptyVideosMsg.textContent = "No matching VODs found.";
+            emptyVideosMsg.textContent = "No matching VIDs found.";
             emptyVideosMsg.classList.remove("hidden");
         } else if (items.length > 0) {
             emptyVideosMsg.classList.add("hidden");
         } else {
-            emptyVideosMsg.textContent = "No VODs ingested yet. Click 'Ingest VODs' above!";
+            emptyVideosMsg.textContent = "No VIDs ingested yet. Click 'Ingest VIDs' above!";
             emptyVideosMsg.classList.remove("hidden");
         }
     });
@@ -1148,7 +1215,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // Match Markdown Links: [Citation Text](URL)
         clean = clean.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, (match, text, url) => {
-            return `<a href="${url}" target="_blank" title="Jump to timestamp in VOD">⏱️ ${text}</a>`;
+            return `<a href="${url}" target="_blank" title="Jump to timestamp in VID">⏱️ ${text}</a>`;
         });
 
         // Convert double newlines to breaks

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VidChatBox - Streamer VOD Chatbot & RAG Pipeline</title>
-    <meta name="description" content="An interactive AI chatbot designed to ingest streamer VODs and reply to questions using timestamped source citations.">
+    <title>VidChatBox - Streamer VID Chatbot & RAG Pipeline</title>
+    <meta name="description" content="An interactive AI chatbot designed to ingest streamer VIDs and reply to questions using timestamped source citations.">
     <!-- Google Fonts: Outfit and Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,48 +29,59 @@
                 </button>
             </div>
 
-            <!-- Project Selector Area (Sleek workspace manager) -->
-            <div class="project-manager-widget">
-                <div class="widget-label">Project Workspace</div>
-                <div class="project-selector-area">
-                    <select id="project-select" class="custom-select flex-grow">
-                        <option value="default">default</option>
-                    </select>
-                    <button type="button" id="btn-add-project" class="btn-secondary-icon" title="New Project">➕</button>
-                    <button type="button" id="btn-delete-project" class="btn-danger-icon" title="Delete Project">🗑️</button>
+            <!-- Group Selector Area (Sleek workspace manager) -->
+            <div class="group-manager-widget">
+                <div class="widget-header-row">
+                    <span class="widget-label">Groups (Nhóm VIDs)</span>
+                    <button type="button" id="btn-add-group-toggle" class="btn-add-group-toggle" title="Create New Group">➕</button>
+                </div>
+                
+                <!-- Inline Create Group Form (hidden by default) -->
+                <div id="inline-group-form" class="inline-group-form hidden">
+                    <input type="text" id="inline-group-name" placeholder="New group name..." autocomplete="off">
+                    <div class="inline-group-actions">
+                        <button type="button" id="btn-inline-group-save" class="btn-inline-save" title="Save Group">✔️</button>
+                        <button type="button" id="btn-inline-group-cancel" class="btn-inline-cancel" title="Cancel">❌</button>
+                    </div>
+                </div>
+
+                <div class="group-list-wrapper">
+                    <ul id="group-list" class="group-list">
+                        <!-- Populated dynamically via JS -->
+                    </ul>
                 </div>
             </div>
 
             <!-- Ingest Video Action -->
             <div class="sidebar-action-area">
                 <button type="button" id="btn-open-ingest" class="btn btn-primary btn-full-width">
-                    <span>➕ Ingest VODs</span>
+                    <span>➕ Ingest VIDs</span>
                 </button>
             </div>
 
-            <!-- Knowledge Base VOD Library -->
+            <!-- Knowledge Base VID Library -->
             <div class="library-container">
                 <div class="library-header">
                     <h2>📚 Knowledge Base</h2>
                     <div style="display: flex; align-items: center; gap: 0.35rem;">
-                        <span class="video-count" id="video-count">0 VODs</span>
+                        <span class="video-count" id="video-count">0 VIDs</span>
                         <button type="button" id="btn-batch-download" class="btn-export-md" title="Batch Download All Transcripts (ZIP)" style="padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.02); line-height: 1;">
                             📥
                         </button>
-                        <button type="button" id="btn-delete-all-videos" class="btn-export-md" title="Wipe All VODs in Knowledge Base" style="padding: 2px 4px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.02); line-height: 1; color: var(--text-error);">
+                        <button type="button" id="btn-delete-all-videos" class="btn-export-md" title="Wipe All VIDs in Knowledge Base" style="padding: 2px 4px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.02); line-height: 1; color: var(--text-error);">
                             🗑️
                         </button>
                     </div>
                 </div>
                 
-                <!-- Search bar to filter VODs -->
+                <!-- Search bar to filter VIDs -->
                 <div class="search-wrapper">
-                    <input type="text" id="video-search" placeholder="Search ingested VODs..." aria-label="Search VODs">
+                    <input type="text" id="video-search" placeholder="Search ingested VIDs..." aria-label="Search VIDs">
                 </div>
 
                 <div class="video-list-wrapper">
                     <ul id="video-list" class="video-list">
-                        <li class="empty-list" id="empty-videos-msg">No VODs ingested yet. Click 'Ingest VODs' above!</li>
+                        <li class="empty-list" id="empty-videos-msg">No VIDs ingested yet. Click 'Ingest VIDs' above!</li>
                     </ul>
                 </div>
             </div>
@@ -149,7 +160,7 @@
                             <div class="suggestion-card" data-prompt="Summarize the latest stream segments.">
                                 <span class="suggestion-icon">⏱️</span>
                                 <div class="suggestion-title">Summarize the stream</div>
-                                <div class="suggestion-desc">Get a quick chronological overview of the active VOD transcript.</div>
+                                <div class="suggestion-desc">Get a quick chronological overview of the active VID transcript.</div>
                             </div>
                             <div class="suggestion-card" data-prompt="What did the streamer say about Genshin Impact?">
                                 <span class="suggestion-icon">🎮</span>
@@ -184,12 +195,12 @@
                 <!-- Chat Input Area (ChatGPT pill shape) -->
                 <footer class="chat-input-container">
                     <form id="chat-form" class="chat-input-area">
-                        <!-- Add VOD button inside input (matches file attachment button) -->
-                        <button type="button" id="btn-input-attach" class="btn-attach" title="Ingest Video VODs">
+                        <!-- Add VID button inside input (matches file attachment button) -->
+                        <button type="button" id="btn-input-attach" class="btn-attach" title="Ingest Video VIDs">
                             <span class="attach-icon">➕</span>
                         </button>
                         
-                        <textarea id="chat-input" placeholder="Ask a question about the VODs..." rows="1" required></textarea>
+                        <textarea id="chat-input" placeholder="Ask a question about the VIDs..." rows="1" required></textarea>
                         
                         <button type="submit" id="btn-send" class="btn btn-send" title="Send Message">
                             <svg viewBox="0 0 24 24" class="send-icon">
@@ -203,11 +214,11 @@
         </main>
     </div>
 
-    <!-- Ingest VODs Modal Dialog (Glassmorphism overlay) -->
+    <!-- Ingest VIDs Modal Dialog (Glassmorphism overlay) -->
     <div id="ingest-modal" class="modal-overlay hidden">
         <div class="modal-content glass">
             <div class="modal-header">
-                <h2>📥 Ingest Stream VODs</h2>
+                <h2>📥 Ingest Stream VIDs</h2>
                 <button type="button" id="btn-close-modal" class="btn-close">&times;</button>
             </div>
             <form id="ingest-form" class="ingest-form">
@@ -221,7 +232,7 @@
                 <div class="modal-actions">
                     <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
                     <button type="submit" id="btn-ingest" class="btn btn-primary">
-                        <span>Ingest VOD(s)</span>
+                        <span>Ingest VID(s)</span>
                         <div class="spinner hidden" id="ingest-spinner"></div>
                     </button>
                 </div>
@@ -290,7 +301,7 @@
         <div class="widget-header">
             <div class="widget-header-title">
                 <span class="widget-icon">⚡</span>
-                <span id="widget-overall-status">Ingesting VODs...</span>
+                <span id="widget-overall-status">Ingesting VIDs...</span>
             </div>
             <div class="widget-header-actions">
                 <button type="button" id="btn-widget-toggle" class="btn-widget-action" title="Toggle Expand/Minimize">
@@ -302,17 +313,17 @@
             </div>
         </div>
         
-        <!-- Progress Bar and Percent -->
+        <!-- Progress Summary -->
         <div class="widget-progress-summary">
             <div class="progress-bar-wrapper">
                 <div id="widget-progress-bar" class="progress-bar"></div>
             </div>
             <span id="widget-progress-percent">0%</span>
         </div>
-
+        
         <!-- Widget Body (List of items with steps checklist) -->
         <div id="widget-body" class="widget-body">
-            <div class="widget-subtitle" id="widget-active-title">No VODs active</div>
+            <div class="widget-subtitle" id="widget-active-title">No VIDs active</div>
             <ul id="widget-tasks-list" class="widget-tasks-list">
                 <!-- Video tasks dynamically injected here -->
             </ul>
