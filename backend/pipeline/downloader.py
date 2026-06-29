@@ -101,6 +101,13 @@ class VideoDownloader:
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
+            'youtube_include_dash_manifest': False,
+            'youtube_include_hls_manifest': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'web']
+                }
+            }
         }
         
         cookie_file = self._get_cookiefile_path()
@@ -199,6 +206,13 @@ class VideoDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'youtube_include_dash_manifest': False,
+            'youtube_include_hls_manifest': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'web']
+                }
+            }
         }
         cookie_file = self._get_cookiefile_path()
         if cookie_file:
