@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VidChatBox - Streamer VOD Chatbot & RAG Pipeline</title>
+    <meta name="description" content="An interactive AI chatbot designed to ingest streamer VODs and reply to questions using timestamped source citations.">
+    <!-- Google Fonts: Outfit and Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Main Style Sheet -->
+    <link rel="stylesheet" href="css/style.css?v=1.0.2">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation (ChatGPT style, dark themed) -->
+        <aside id="sidebar" class="app-sidebar" aria-label="Ingestion Control Panel">
+            <!-- Sidebar Header -->
+            <div class="sidebar-header">
+                <div class="logo-area">
+                    <span class="logo-icon">🔮</span>
+                    <h1>VidChatBox</h1>
+                </div>
+                <button type="button" id="btn-sidebar-close" class="btn-sidebar-toggle" title="Collapse Sidebar">
+                    <svg viewBox="0 0 24 24" class="sidebar-toggle-icon">
+                        <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Project Selector Area (Sleek workspace manager) -->
+            <div class="project-manager-widget">
+                <div class="widget-label">Project Workspace</div>
+                <div class="project-selector-area">
+                    <select id="project-select" class="custom-select flex-grow">
+                        <option value="default">default</option>
+                    </select>
+                    <button type="button" id="btn-add-project" class="btn-secondary-icon" title="New Project">➕</button>
+                    <button type="button" id="btn-delete-project" class="btn-danger-icon" title="Delete Project">🗑️</button>
+                </div>
+            </div>
+
+            <!-- Ingest Video Action -->
+            <div class="sidebar-action-area">
+                <button type="button" id="btn-open-ingest" class="btn btn-primary btn-full-width">
+                    <span>➕ Ingest VODs</span>
+                </button>
+            </div>
+
+            <!-- Knowledge Base VOD Library -->
+            <div class="library-container">
+                <div class="library-header">
+                    <h2>📚 Knowledge Base</h2>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <span class="video-count" id="video-count">0 VODs</span>
+                        <button type="button" id="btn-batch-download" class="btn-export-md" title="Batch Download All Transcripts (ZIP)" style="padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.02); line-height: 1;">
+                            📥
+                        </button>
+                        <button type="button" id="btn-delete-all-videos" class="btn-export-md" title="Wipe All VODs in Knowledge Base" style="padding: 2px 4px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.02); line-height: 1; color: var(--text-error);">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search bar to filter VODs -->
+                <div class="search-wrapper">
+                    <input type="text" id="video-search" placeholder="Search ingested VODs..." aria-label="Search VODs">
+                </div>
+
+                <div class="video-list-wrapper">
+                    <ul id="video-list" class="video-list">
+                        <li class="empty-list" id="empty-videos-msg">No VODs ingested yet. Click 'Ingest VODs' above!</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Sidebar Footer Settings -->
+            <div class="sidebar-footer">
+                <div class="footer-label">VidChatBox v1.0.0</div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Workspace -->
+        <main class="chat-workspace">
+            <!-- Slim Top Bar -->
+            <header class="chat-header">
+                <div class="header-left">
+                    <button type="button" id="btn-sidebar-open" class="btn-sidebar-toggle hidden" title="Expand Sidebar">
+                        <svg viewBox="0 0 24 24" class="sidebar-toggle-icon">
+                            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                        </svg>
+                    </button>
+                    <span class="header-title" id="active-project-name">default</span>
+                    <button type="button" id="btn-clear-chat" class="btn-sidebar-toggle" title="Clear Chat History" style="margin-left: 0.5rem; width: 1.85rem; height: 1.85rem;">
+                        <svg viewBox="0 0 24 24" style="width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                    </button>
+                    <button type="button" id="btn-open-settings" class="btn-sidebar-toggle" title="API Settings" style="margin-left: 0.5rem; width: 1.85rem; height: 1.85rem;">
+                        <svg viewBox="0 0 24 24" style="width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="header-settings">
+                    <div class="setting-group">
+                        <label for="provider-select">AI Engine</label>
+                        <select id="provider-select" class="custom-select">
+                            <option value="groq" selected>Groq LPU</option>
+                            <option value="openrouter" id="opt-openrouter" disabled>OpenRouter (Key required 🔒)</option>
+                            <option value="gemini" id="opt-gemini" disabled>Gemini (Key required 🔒)</option>
+                            <option value="openai" id="opt-openai" disabled>OpenAI (Key required 🔒)</option>
+                            <option value="deepseek" id="opt-deepseek" disabled>DeepSeek (Key required 🔒)</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="model-select">AI Model</label>
+                        <select id="model-select" class="custom-select">
+                            <!-- Populated dynamically via JS -->
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="persona-select">Persona Mode</label>
+                        <select id="persona-select" class="custom-select">
+                            <option value="assistant" selected>Assistant (Neutral)</option>
+                            <option value="streamer">Streamer (1st Person)</option>
+                        </select>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Chat Columns Panel -->
+            <section class="chat-panel" aria-label="Chat Area">
+                <!-- Chat Messages Logs -->
+                <div id="chat-messages" class="chat-messages">
+                    <!-- Welcome Screen (Shown initially when chat is empty) -->
+                    <div class="welcome-container" id="welcome-container">
+                        <div class="welcome-logo">🔮</div>
+                        <h2>What would you like to know from the stream memories?</h2>
+                        <p class="welcome-subtitle">Ask questions about streamer opinions, playstyles, or discussions. Click a suggestion below to start instantly.</p>
+                        
+                        <div class="suggestion-grid">
+                            <div class="suggestion-card" data-prompt="Summarize the latest stream segments.">
+                                <span class="suggestion-icon">⏱️</span>
+                                <div class="suggestion-title">Summarize the stream</div>
+                                <div class="suggestion-desc">Get a quick chronological overview of the active VOD transcript.</div>
+                            </div>
+                            <div class="suggestion-card" data-prompt="What did the streamer say about Genshin Impact?">
+                                <span class="suggestion-icon">🎮</span>
+                                <div class="suggestion-title">Genshin Opinions</div>
+                                <div class="suggestion-desc">Find what comments and thoughts the streamer shared on Genshin.</div>
+                            </div>
+                            <div class="suggestion-card" data-prompt="Show timestamps for gaming setup or hardware advice.">
+                                <span class="suggestion-icon">💡</span>
+                                <div class="suggestion-title">Setup recommendations</div>
+                                <div class="suggestion-desc">Extract advice regarding keyboard, PC specs, or mic setup.</div>
+                            </div>
+                            <div class="suggestion-card" data-prompt="Search for key developer opinions and patch analysis.">
+                                <span class="suggestion-icon">💬</span>
+                                <div class="suggestion-title">Developer opinions</div>
+                                <div class="suggestion-desc">Find segments talking about updates, developers, or patches.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typing-indicator" class="typing-indicator hidden">
+                    <div class="message-avatar">🔮</div>
+                    <div class="typing-bubble">
+                        <span>Đang suy nghĩ</span>
+                        <span class="dot">.</span>
+                        <span class="dot">.</span>
+                        <span class="dot">.</span>
+                    </div>
+                </div>
+
+                <!-- Chat Input Area (ChatGPT pill shape) -->
+                <footer class="chat-input-container">
+                    <form id="chat-form" class="chat-input-area">
+                        <!-- Add VOD button inside input (matches file attachment button) -->
+                        <button type="button" id="btn-input-attach" class="btn-attach" title="Ingest Video VODs">
+                            <span class="attach-icon">➕</span>
+                        </button>
+                        
+                        <textarea id="chat-input" placeholder="Ask a question about the VODs..." rows="1" required></textarea>
+                        
+                        <button type="submit" id="btn-send" class="btn btn-send" title="Send Message">
+                            <svg viewBox="0 0 24 24" class="send-icon">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"></path>
+                            </svg>
+                        </button>
+                    </form>
+                    <div class="chat-disclaimer">VidChatBox can make mistakes. Verify important timestamped citations.</div>
+                </footer>
+            </section>
+        </main>
+    </div>
+
+    <!-- Ingest VODs Modal Dialog (Glassmorphism overlay) -->
+    <div id="ingest-modal" class="modal-overlay hidden">
+        <div class="modal-content glass">
+            <div class="modal-header">
+                <h2>📥 Ingest Stream VODs</h2>
+                <button type="button" id="btn-close-modal" class="btn-close">&times;</button>
+            </div>
+            <form id="ingest-form" class="ingest-form">
+                <div class="form-group">
+                    <label for="vod-urls">YouTube Video URL(s)</label>
+                    <div class="input-wrapper">
+                        <textarea id="vod-urls" placeholder="Paste YouTube URL(s) - one URL per line for batch processing" required></textarea>
+                    </div>
+                    <span class="form-tip">We will extract the official transcripts or auto-captions and save them to the project database.</span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" id="btn-ingest" class="btn btn-primary">
+                        <span>Ingest VOD(s)</span>
+                        <div class="spinner hidden" id="ingest-spinner"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- API Settings Modal Dialog (Glassmorphism overlay) -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal-content glass">
+            <div class="modal-header">
+                <h2>⚙️ API Settings</h2>
+                <button type="button" id="btn-close-settings" class="btn-close" title="Close Settings">&times;</button>
+            </div>
+            <form id="settings-form" class="ingest-form">
+                <div class="form-tip" style="color: var(--text-muted); font-size: 0.75rem; line-height: 1.4; margin-bottom: 0.5rem;">
+                    Enter your custom API keys below. They are saved securely in your browser's local storage and sent dynamically in request headers or body.
+                </div>
+                
+                <div class="form-group">
+                    <label for="user-openrouter-key">OpenRouter API Key</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="user-openrouter-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="sk-or-v1-...">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="user-groq-key">Groq API Key</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="user-groq-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="gsk_...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="user-openai-key">OpenAI API Key (for Embeddings / Direct)</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="user-openai-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="sk-...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="user-gemini-key">Gemini API Key (for Embeddings / Direct)</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="user-gemini-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="AIzaSy...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="user-deepseek-key">DeepSeek API Key (Direct)</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="user-deepseek-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="sk-...">
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="margin-top: 1rem;">
+                    <button type="button" id="btn-cancel-settings" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Real-time Ingestion Progress Floating Dashboard (Google Drive style) -->
+    <div id="progress-widget" class="progress-widget hidden">
+        <!-- Widget Header -->
+        <div class="widget-header">
+            <div class="widget-header-title">
+                <span class="widget-icon">⚡</span>
+                <span id="widget-overall-status">Ingesting VODs...</span>
+            </div>
+            <div class="widget-header-actions">
+                <button type="button" id="btn-widget-toggle" class="btn-widget-action" title="Toggle Expand/Minimize">
+                    <svg viewBox="0 0 24 24" class="widget-toggle-icon">
+                        <path d="M19 9l-7 7-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+                    </svg>
+                </button>
+                <button type="button" id="btn-widget-close" class="btn-widget-action hidden" title="Close Progress Panel">&times;</button>
+            </div>
+        </div>
+        
+        <!-- Progress Bar and Percent -->
+        <div class="widget-progress-summary">
+            <div class="progress-bar-wrapper">
+                <div id="widget-progress-bar" class="progress-bar"></div>
+            </div>
+            <span id="widget-progress-percent">0%</span>
+        </div>
+
+        <!-- Widget Body (List of items with steps checklist) -->
+        <div id="widget-body" class="widget-body">
+            <div class="widget-subtitle" id="widget-active-title">No VODs active</div>
+            <ul id="widget-tasks-list" class="widget-tasks-list">
+                <!-- Video tasks dynamically injected here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Main JS Application -->
+    <script src="js/app.js?v=1.0.2"></script>
+</body>
+</html>
