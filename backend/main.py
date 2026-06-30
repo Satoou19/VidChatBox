@@ -344,8 +344,12 @@ def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
     if not req.url:
         raise HTTPException(status_code=400, detail="URL cannot be empty")
         
+    clean_url = req.url.strip(" \t\n\r\"'[]")
+    if not clean_url:
+        raise HTTPException(status_code=400, detail="URL cannot be empty")
+        
     # Generate stable task ID from URL hash to avoid duplicate ingestion tasks
-    url_hash = hashlib.md5(req.url.encode("utf-8")).hexdigest()
+    url_hash = hashlib.md5(clean_url.encode("utf-8")).hexdigest()
     task_id = f"task_{url_hash}"
     
     # Check if already running or completed
@@ -358,19 +362,19 @@ def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
     ingestion_tasks[task_id] = {
         "status": "pending",
         "percent": 0.0,
-        "title": req.url,
+        "title": clean_url,
         "error": None,
         "total_videos": 1,
         "completed_videos": 0,
         "current_index": 1,
-        "current_video_title": req.url,
+        "current_video_title": clean_url,
         "current_video_status": "pending",
         "current_video_percent": 0.0,
         "overall_percent": 0.0,
-        "videos": [{"url": req.url, "title": req.url, "status": "pending", "percent": 0.0, "error": None}]
+        "videos": [{"url": clean_url, "title": clean_url, "status": "pending", "percent": 0.0, "error": None}]
     }
     
-    background_tasks.add_task(run_ingestion_pipeline, task_id, req.url, req.provider, req.project_id, req.openai_key, req.gemini_key, req.openrouter_key)
+    background_tasks.add_task(run_ingestion_pipeline, task_id, clean_url, req.provider, req.project_id, req.openai_key, req.gemini_key, req.openrouter_key)
     return {"task_id": task_id, "status": "pending", "message": "Ingestion started in background"}
 
 
@@ -380,7 +384,7 @@ def start_batch_ingest(req: BatchIngestRequest, background_tasks: BackgroundTask
     if not req.urls:
         raise HTTPException(status_code=400, detail="URL list cannot be empty")
         
-    urls = [url.strip() for url in req.urls if url.strip()]
+    urls = [url.strip(" \t\n\r\"'[]") for url in req.urls if url.strip(" \t\n\r\"'[]")]
     if not urls:
         raise HTTPException(status_code=400, detail="No valid URLs provided")
         
