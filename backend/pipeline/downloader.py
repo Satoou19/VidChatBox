@@ -207,16 +207,10 @@ class VideoDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            # skip_download + format prevent yt-dlp from raising
-            # "Requested format is not available" during metadata extraction
-            'skip_download': True,
-            'format': 'bestaudio/best',
             'youtube_include_dash_manifest': False,
             'youtube_include_hls_manifest': False,
             'extractor_args': {
                 'youtube': {
-                    # 'ios' client causes format-availability errors on some videos;
-                    # 'web' is more permissive for metadata-only fetches
                     'player_client': ['web']
                 }
             }
@@ -227,7 +221,11 @@ class VideoDownloader:
             
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                info = ydl.extract_info(url, download=False)
+                # process=False skips process_video_result() entirely,
+                # which is where yt-dlp validates format availability.
+                # subtitles/automatic_captions come from the raw extractor
+                # output and are still populated with process=False.
+                info = ydl.extract_info(url, download=False, process=False)
                 return {
                     "id": info.get("id"),
                     "title": info.get("title"),
