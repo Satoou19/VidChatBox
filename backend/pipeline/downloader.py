@@ -207,13 +207,14 @@ class VideoDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            # ignore_no_formats_error: if format selection finds nothing, warn
+            # instead of raising. This lets process_video_result() complete and
+            # populate automatic_captions/subtitles even when no video formats
+            # are available (e.g. restricted formats, certain player clients).
+            'ignore_no_formats_error': True,
+            'skip_download': True,
             'youtube_include_dash_manifest': False,
             'youtube_include_hls_manifest': False,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web']
-                }
-            }
         }
         cookie_file = self._get_cookiefile_path()
         if cookie_file:
@@ -221,11 +222,7 @@ class VideoDownloader:
             
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                # process=False skips process_video_result() entirely,
-                # which is where yt-dlp validates format availability.
-                # subtitles/automatic_captions come from the raw extractor
-                # output and are still populated with process=False.
-                info = ydl.extract_info(url, download=False, process=False)
+                info = ydl.extract_info(url, download=False)
                 return {
                     "id": info.get("id"),
                     "title": info.get("title"),
