@@ -66,11 +66,14 @@ class VideoDownloader:
         
         pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
         selected_lang = None
+        matched_key = None
+        is_auto = False
         
         # 1. Try manual subtitles first (safe from 429 translation rates)
         for lang in pref_langs:
             if lang in subtitles:
                 selected_lang = lang
+                matched_key = lang
                 break
                 
         # 2. Try automatic captions in the video's original language (prevents on-the-fly translation 429s)
@@ -83,70 +86,63 @@ class VideoDownloader:
                     
             if orig_lang and orig_lang in auto_captions:
                 selected_lang = orig_lang
+                matched_key = orig_lang
+                is_auto = True
             else:
                 # Fallbacks
                 if 'en' in auto_captions:
                     selected_lang = 'en'
+                    matched_key = 'en'
+                    is_auto = True
                 elif auto_captions:
-                    selected_lang = list(auto_captions.keys())[0].split("-")[0]
+                    matched_key = list(auto_captions.keys())[0]
+                    selected_lang = matched_key.split("-")[0]
+                    is_auto = True
                     
-        if not selected_lang:
+        if not selected_lang or not matched_key:
             raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
             
-        ydl_opts = {
-            'writeautomaticsub': True,
-            'writesubtitles': True,
-            'subtitleslangs': [selected_lang],
-            'skip_download': True,
-            'ignore_no_formats_error': True,
-            'outtmpl': output_template,
-            'quiet': True,
-            'no_warnings': True,
-            'youtube_include_dash_manifest': False,
-            'youtube_include_hls_manifest': False,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web']
-                }
-            }
-        }
+        # Find the VTT URL
+        target_dict = auto_captions if is_auto else subtitles
+        lang_subs = target_dict.get(matched_key, [])
+        vtt_url = None
         
-        cookie_file = self._get_cookiefile_path()
-        if cookie_file:
-            ydl_opts['cookiefile'] = cookie_file
+        # We prefer vtt, but will fallback to json3 if necessary (though our parser requires vtt)
+        for sub in lang_subs:
+            if sub.get('ext') == 'vtt':
+                vtt_url = sub.get('url')
+                break
+                
+        if not vtt_url:
+            raise FileNotFoundError(f"VTT subtitle format not available for language '{selected_lang}'.")
             
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            if progress_callback:
+                progress_callback("extracting_subtitles", 30)
+                
+            # Download the VTT file directly
+            import urllib.request
+            vtt_path = os.path.join(subs_dir, f"subs_{safe_video_id}.{selected_lang}.vtt")
+            
+            req = urllib.request.Request(vtt_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response, open(vtt_path, 'wb') as out_file:
+                out_file.write(response.read())
+                
+            if not os.path.exists(vtt_path):
+                raise FileNotFoundError("No subtitle files downloaded successfully.")
+                
+            # Parse the VTT file
+            segments = self._parse_vtt(vtt_path)
+            
+            # Clean up local subtitle files and temp directory if empty
             try:
-                if progress_callback:
-                    progress_callback("extracting_subtitles", 30)
-                ydl.extract_info(url, download=True)
+                os.remove(vtt_path)
+            except:
+                pass
                 
-                # Check for written subtitle file (.vtt)
-                vtt_path = os.path.join(subs_dir, f"subs_{safe_video_id}.{selected_lang}.vtt")
-                
-                # Fallback: search directory for any .vtt file starting with subs_<video_id>
-                if not os.path.exists(vtt_path):
-                    vtt_path = None
-                    for f in os.listdir(subs_dir):
-                        if f.startswith(f"subs_{safe_video_id}") and f.endswith(".vtt"):
-                            vtt_path = os.path.join(subs_dir, f)
-                            break
-                            
-                if not vtt_path or not os.path.exists(vtt_path):
-                    raise FileNotFoundError("No subtitle files downloaded successfully.")
-                    
-                # Parse the VTT file
-                segments = self._parse_vtt(vtt_path)
-                
-                # Clean up local subtitle files and temp directory if empty
-                try:
-                    os.remove(vtt_path)
-                except:
-                    pass
-                    
-                info["segments"] = segments
-                return info
-            except Exception as e:
+            info["segments"] = segments
+            return info
+        except Exception as e:
                 raise Exception(f"Failed to fetch subtitles: {str(e)}")
 
     def _parse_vtt(self, file_path):
