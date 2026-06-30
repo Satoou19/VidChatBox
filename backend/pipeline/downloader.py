@@ -98,7 +98,7 @@ class VideoDownloader:
             'writesubtitles': True,
             'subtitleslangs': [selected_lang],
             'skip_download': True,
-            'format': 'bestaudio/best',
+            'ignore_no_formats_error': True,
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
