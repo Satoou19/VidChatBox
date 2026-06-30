@@ -98,6 +98,7 @@ class VideoDownloader:
             'writesubtitles': True,
             'subtitleslangs': [selected_lang],
             'skip_download': True,
+            'format': 'bestaudio/best',
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
@@ -105,7 +106,7 @@ class VideoDownloader:
             'youtube_include_hls_manifest': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'web']
+                    'player_client': ['web']
                 }
             }
         }
@@ -206,11 +207,17 @@ class VideoDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            # skip_download + format prevent yt-dlp from raising
+            # "Requested format is not available" during metadata extraction
+            'skip_download': True,
+            'format': 'bestaudio/best',
             'youtube_include_dash_manifest': False,
             'youtube_include_hls_manifest': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'web']
+                    # 'ios' client causes format-availability errors on some videos;
+                    # 'web' is more permissive for metadata-only fetches
+                    'player_client': ['web']
                 }
             }
         }
