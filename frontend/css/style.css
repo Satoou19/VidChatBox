@@ -474,7 +474,10 @@ body {
     margin-top: 0.1rem;
 }
 
-.video-item:hover .video-item-actions, .video-item.active .video-item-actions {
+.video-item:hover .video-item-actions, 
+.video-item.active .video-item-actions,
+.video-item-actions:has(button:disabled),
+.video-item-actions.loading {
     opacity: 1;
 }
 
@@ -1436,3 +1439,77 @@ body {
     display: inline !important;
     box-shadow: none !important;
 }
+
+/* Toast Notifications Container */
+#toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: 380px;
+    width: calc(100% - 3rem);
+    pointer-events: none;
+}
+
+/* Toast Message Style (Glassmorphism dark theme) */
+.toast-message {
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    transform: translateY(1.5rem);
+    opacity: 0;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    pointer-events: auto;
+}
+
+.toast-message.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.toast-message.hide {
+    transform: translateY(-1rem);
+    opacity: 0;
+}
+
+.toast-message.success {
+    border-left: 3px solid var(--text-success);
+}
+
+.toast-message.error {
+    border-left: 3px solid var(--text-error);
+}
+
+.toast-message.info {
+    border-left: 3px solid var(--accent-blue);
+}
+
+.toast-message.polish {
+    border-left: 3px solid #fbbf24; /* Amber yellow */
+}
+
+/* Pulse animation for disabled buttons in loading state */
+.btn-export-md:disabled, .btn-export-ai:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+    animation: pulse-loading 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-loading {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+

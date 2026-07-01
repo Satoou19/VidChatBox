@@ -280,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
         updateProviderDropdown();
         closeSettingsModal();
-        alert("API Settings saved successfully!");
+        showToast("API Settings saved successfully!", "success");
     });
 
     // -------------------------------------------------------------
@@ -388,7 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
         } catch (err) {
-            alert(err.message);
+            showToast("Ingestion error: " + err.message, "error");
             widgetOverallStatus.textContent = "Error";
             widgetOverallStatus.style.color = "var(--text-error)";
             widgetActiveTitle.textContent = err.message;
@@ -835,7 +835,7 @@ document.addEventListener("DOMContentLoaded", () => {
             loadChatHistory();
             await loadProjects();
         } catch (err) {
-            alert("Error: " + err.message);
+            showToast("Group creation error: " + err.message, "error");
         }
     }
 
@@ -860,7 +860,7 @@ document.addEventListener("DOMContentLoaded", () => {
             loadChatHistory();
             await loadProjects();
         } catch (err) {
-            alert("Error: " + err.message);
+            showToast("Group deletion error: " + err.message, "error");
         }
     }
 
@@ -937,7 +937,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 a.remove();
                 window.URL.revokeObjectURL(downloadUrl);
             } catch (err) {
-                alert("Batch export error: " + err.message);
+                showToast("Batch export error: " + err.message, "error");
             } finally {
                 btnBatchDownload.disabled = false;
                 btnBatchDownload.innerHTML = originalText;
@@ -960,10 +960,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!response.ok) {
                         throw new Error(await getErrorMessage(response, "Failed to delete all videos"));
                     }
-                    alert("All videos deleted successfully.");
+                    showToast("All videos deleted successfully.", "success");
                     loadVideos();
                 } catch (err) {
-                    alert("Delete error: " + err.message);
+                    showToast("Delete error: " + err.message, "error");
                 } finally {
                     btnDeleteAllVideos.disabled = false;
                     btnDeleteAllVideos.innerHTML = originalText;
@@ -1081,10 +1081,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!response.ok) {
                         throw new Error(await getErrorMessage(response, "Failed to delete video"));
                     }
-                    alert("Video deleted successfully.");
+                    showToast("Video deleted successfully.", "success");
                     loadVideos();
                 } catch (err) {
-                    alert("Delete error: " + err.message);
+                    showToast("Delete error: " + err.message, "error");
                     btnDelete.disabled = false;
                     btnDelete.innerHTML = originalText;
                 }
@@ -1102,8 +1102,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const videoId = btn.getAttribute("data-id");
         const originalText = btn.innerHTML;
         
+        const videoItem = btn.closest(".video-item");
+        const videoTitle = videoItem ? videoItem.querySelector("h4").textContent : "Video";
+        const actionsGroup = btn.closest(".video-item-actions");
+        
         btn.disabled = true;
         btn.innerHTML = useAI ? "Polishing... ✨" : "Exporting... ⏳";
+        if (actionsGroup) actionsGroup.classList.add("loading");
         
         try {
             // Include active provider and model in query parameters for AI polishing
@@ -1137,6 +1142,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (response.status === 202) {
                     const statusData = await response.json();
                     
+                    let activeToast = showToast(`Starting AI Polishing for "${escapeHtml(videoTitle)}"...`, "polish", 30000);
+                    
                     // Poll the status API
                     const pollInterval = setInterval(async () => {
                         try {
@@ -1145,15 +1152,25 @@ document.addEventListener("DOMContentLoaded", () => {
                             const status = await statusResponse.json();
                             if (status.status === "completed") {
                                 clearInterval(pollInterval);
+                                if (activeToast) {
+                                    activeToast.update(`AI Polishing complete! Downloading file...`);
+                                    setTimeout(() => activeToast.dismiss(), 2000);
+                                }
                                 // Polishing complete, make export request again to download the cached file
                                 makeExportRequest();
                             } else if (status.status === "failed") {
                                 clearInterval(pollInterval);
-                                alert("AI Polishing failed: " + status.error);
+                                if (activeToast) activeToast.dismiss();
+                                showToast("AI Polishing failed: " + status.error, "error");
                                 btn.disabled = false;
                                 btn.innerHTML = originalText;
+                                if (actionsGroup) actionsGroup.classList.remove("loading");
                             } else {
-                                btn.innerHTML = `Polishing... ${Math.round(status.percent)}% ✨`;
+                                const percent = Math.round(status.percent);
+                                btn.innerHTML = `Polishing... ${percent}% ✨`;
+                                if (activeToast) {
+                                    activeToast.update(`Polishing "${escapeHtml(videoTitle)}"... <strong>${percent}%</strong>`);
+                                }
                             }
                         } catch (pollErr) {
                             console.error("Polling error:", pollErr);
@@ -1186,14 +1203,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 btn.disabled = false;
                 btn.innerHTML = originalText;
+                if (actionsGroup) actionsGroup.classList.remove("loading");
+                showToast(`Downloaded: ${filename}`, "success");
             };
             
             await makeExportRequest();
             
         } catch (err) {
-            alert("Export error: " + err.message);
+            showToast("Export error: " + err.message, "error");
             btn.disabled = false;
             btn.innerHTML = originalText;
+            if (actionsGroup) actionsGroup.classList.remove("loading");
         }
     });
 
@@ -1382,5 +1402,49 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             return response.statusText || defaultMsg;
         }
+    }
+
+    // Modern Toast Notification UI Helper
+    function showToast(message, type = "info", duration = 4000) {
+        let container = document.getElementById("toast-container");
+        if (!container) {
+            container = document.createElement("div");
+            container.id = "toast-container";
+            document.body.appendChild(container);
+        }
+        
+        const toast = document.createElement("div");
+        toast.className = `toast-message ${type}`;
+        
+        let icon = "ℹ️";
+        if (type === "success") icon = "✅";
+        if (type === "error") icon = "⚠️";
+        if (type === "polish") icon = "✨";
+        
+        toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${message}</span>`;
+        container.appendChild(toast);
+        
+        // Trigger reflow & show
+        setTimeout(() => toast.classList.add("show"), 10);
+        
+        // Hide and remove helper
+        const removeToast = () => {
+            toast.classList.remove("show");
+            toast.classList.add("hide");
+            setTimeout(() => toast.remove(), 300);
+        };
+        
+        if (duration > 0) {
+            setTimeout(removeToast, duration);
+        }
+        
+        return {
+            element: toast,
+            update: (newMessage) => {
+                const textSpan = toast.querySelector(".toast-text");
+                if (textSpan) textSpan.innerHTML = newMessage;
+            },
+            dismiss: removeToast
+        };
     }
 });
