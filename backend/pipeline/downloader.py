@@ -64,32 +64,33 @@ class VideoDownloader:
         Returns info dictionary containing segments parsed from subtitles.
         """
         video_id = self.get_youtube_video_id(url)
+        
+        # --- 1. Try youtube-transcript-api first (Very fast & lightweight) ---
+        if video_id:
+            try:
+                if progress_callback:
+                    progress_callback("extracting_subtitles_fast", 20)
+                return self._download_subtitles_transcript_api(url, video_id, info=None, progress_callback=progress_callback)
+            except Exception as api_err:
+                print(f"youtube-transcript-api fast-path failed ({api_err}). Falling back to yt-dlp...")
+                
+        # --- 2. Fallback to yt-dlp metadata extraction & VTT download ---
         info = None
         extract_err = None
-        
-        # Try extracting metadata with yt-dlp first
         try:
+            if progress_callback:
+                progress_callback("extracting_metadata", 40)
             info = self.extract_info(url)
         except Exception as e:
             extract_err = e
             print(f"yt-dlp extract_info failed: {e}")
             
-        # If we got info, let's try standard download method
         if info:
             try:
                 return self._download_subtitles_ytdlp(url, info, progress_callback)
             except Exception as ytdlp_err:
-                print(f"yt-dlp subtitle download failed: {ytdlp_err}. Trying youtube-transcript-api fallback...")
-                
-        # Fallback to youtube-transcript-api
-        if video_id:
-            try:
-                if progress_callback:
-                    progress_callback("extracting_subtitles_fallback", 40)
-                return self._download_subtitles_transcript_api(url, video_id, info, progress_callback)
-            except Exception as api_err:
-                print(f"youtube-transcript-api fallback failed: {api_err}")
-                raise Exception(f"Failed to fetch subtitles. yt-dlp error: {extract_err or 'None'}. transcript-api error: {api_err}")
+                print(f"yt-dlp subtitle download failed: {ytdlp_err}")
+                raise Exception(f"Failed to fetch subtitles. Fast-path failed. yt-dlp error: {ytdlp_err}. Info extract error: {extract_err or 'None'}")
         else:
             if extract_err:
                 raise extract_err
