@@ -165,6 +165,7 @@ class VideoDownloader:
                     'subtitleslangs': [matched_key],
                     'subtitlesformat': 'vtt/best',
                     'outtmpl': os.path.join(subs_dir, f"subs_{safe_video_id}"),
+                    'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web', 'tv']}},
                 }
                 if cookie_file:
                     ydl_opts['cookiefile'] = cookie_file
@@ -260,6 +261,7 @@ class VideoDownloader:
             'skip_download': True,
             'youtube_include_dash_manifest': False,
             'youtube_include_hls_manifest': False,
+            'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web', 'tv']}},
         }
         cookie_file = self._get_cookiefile_path()
         if cookie_file:
@@ -315,6 +317,7 @@ class VideoDownloader:
             'progress_hooks': [ydl_hook],
             'quiet': True,
             'no_warnings': True,
+            'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web', 'tv']}},
         }
         
         cookie_file = self._get_cookiefile_path()
