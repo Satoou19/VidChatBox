@@ -6,12 +6,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const modelSelect = document.getElementById("model-select");
     const personaSelect = document.getElementById("persona-select");
     const activeProjectName = document.getElementById("active-project-name");
-    
+
     // Collapsible Sidebar Elements
     const sidebar = document.getElementById("sidebar");
     const btnSidebarClose = document.getElementById("btn-sidebar-close");
     const btnSidebarOpen = document.getElementById("btn-sidebar-open");
-    
+
     // Ingest VODs Modal Elements
     const ingestModal = document.getElementById("ingest-modal");
     const btnOpenIngest = document.getElementById("btn-open-ingest");
@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const vodUrlInput = document.getElementById("vod-urls");
     const btnIngest = document.getElementById("btn-ingest");
     const ingestSpinner = document.getElementById("ingest-spinner");
-    
+
     // API Settings Modal Elements
     const settingsModal = document.getElementById("settings-modal");
     const btnOpenSettings = document.getElementById("btn-open-settings");
@@ -34,13 +34,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const userOpenAIKey = document.getElementById("user-openai-key");
     const userGeminiKey = document.getElementById("user-gemini-key");
     const userDeepSeekKey = document.getElementById("user-deepseek-key");
-    
+
     // Knowledge Base Elements
     const videoList = document.getElementById("video-list");
     const videoCount = document.getElementById("video-count");
     const emptyVideosMsg = document.getElementById("empty-videos-msg");
     const videoSearch = document.getElementById("video-search");
-    
+
     // Chat Elements
     const chatMessages = document.getElementById("chat-messages");
     const welcomeContainer = document.getElementById("welcome-container");
@@ -77,17 +77,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Initialization & Setup
     // -------------------------------------------------------------
-    
+
     loadProjects();
 
     // Auto-resize chat textarea
-    chatInput.addEventListener("input", function() {
+    chatInput.addEventListener("input", function () {
         this.style.height = "auto";
         this.style.height = (this.scrollHeight) + "px";
     });
 
     // Enter key to submit, Shift+Enter to insert newline
-    chatInput.addEventListener("keydown", function(e) {
+    chatInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             chatForm.dispatchEvent(new Event("submit"));
@@ -126,12 +126,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const hasGemini = !!localStorage.getItem("user_gemini_key");
         const hasDeepSeek = !!localStorage.getItem("user_deepseek_key");
         const hasOpenRouter = !!localStorage.getItem("user_openrouter_key");
-        
+
         const optOpenAI = document.getElementById("opt-openai");
         const optGemini = document.getElementById("opt-gemini");
         const optDeepSeek = document.getElementById("opt-deepseek");
         const optOpenRouter = document.getElementById("opt-openrouter");
-        
+
         if (optOpenAI) {
             if (hasOpenAI) {
                 optOpenAI.disabled = false;
@@ -168,7 +168,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 optOpenRouter.textContent = "OpenRouter (Key required 🔒)";
             }
         }
-        
+
         // Prioritize auto-selecting active provider based on configured keys (openrouter > gemini > openai > deepseek > groq)
         if (hasOpenRouter) {
             providerSelect.value = "openrouter";
@@ -202,7 +202,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Sidebar Collapse Logic
     // -------------------------------------------------------------
-    
+
     btnSidebarClose.addEventListener("click", () => {
         sidebar.classList.add("collapsed");
         btnSidebarOpen.classList.remove("hidden");
@@ -216,7 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Modal Overlay Logic
     // -------------------------------------------------------------
-    
+
     const openIngestModal = () => {
         ingestModal.classList.remove("hidden");
         vodUrlInput.focus();
@@ -231,7 +231,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnInputAttach.addEventListener("click", openIngestModal);
     btnCloseModal.addEventListener("click", closeIngestModal);
     btnCancelModal.addEventListener("click", closeIngestModal);
-    
+
     ingestModal.addEventListener("click", (e) => {
         if (e.target === ingestModal) {
             closeIngestModal();
@@ -260,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // API Settings Modal Logic
     // -------------------------------------------------------------
-    
+
     const openSettingsModal = () => {
         // Load saved API keys from localStorage
         userOpenRouterKey.value = localStorage.getItem("user_openrouter_key") || "";
@@ -268,7 +268,7 @@ document.addEventListener("DOMContentLoaded", () => {
         userOpenAIKey.value = localStorage.getItem("user_openai_key") || "";
         userGeminiKey.value = localStorage.getItem("user_gemini_key") || "";
         userDeepSeekKey.value = localStorage.getItem("user_deepseek_key") || "";
-        
+
         settingsModal.classList.remove("hidden");
         userOpenRouterKey.focus();
     };
@@ -280,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btnOpenSettings) btnOpenSettings.addEventListener("click", openSettingsModal);
     if (btnCloseSettings) btnCloseSettings.addEventListener("click", closeSettingsModal);
     if (btnCancelSettings) btnCancelSettings.addEventListener("click", closeSettingsModal);
-    
+
     settingsModal.addEventListener("click", (e) => {
         if (e.target === settingsModal) {
             closeSettingsModal();
@@ -289,14 +289,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     settingsForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        
+
         // Save values to localStorage
         localStorage.setItem("user_openrouter_key", userOpenRouterKey.value.trim());
         localStorage.setItem("user_groq_key", userGroqKey.value.trim());
         localStorage.setItem("user_openai_key", userOpenAIKey.value.trim());
         localStorage.setItem("user_gemini_key", userGeminiKey.value.trim());
         localStorage.setItem("user_deepseek_key", userDeepSeekKey.value.trim());
-        
+
         updateProviderDropdown();
         closeSettingsModal();
         showToast("API Settings saved successfully!", "success");
@@ -305,7 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Suggestion Cards Logic
     // -------------------------------------------------------------
-    
+
     document.addEventListener("click", (e) => {
         const card = e.target.closest(".suggestion-card");
         if (card) {
@@ -315,7 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 chatInput.style.height = "auto";
                 chatInput.style.height = (chatInput.scrollHeight) + "px";
                 chatInput.focus();
-                
+
                 // Submit the form
                 chatForm.dispatchEvent(new Event("submit"));
             }
@@ -325,7 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // VOD Ingestion Form Submission
     // -------------------------------------------------------------
-    
+
     ingestForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const urlsText = vodUrlInput.value.trim();
@@ -355,15 +355,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const openAiKey = localStorage.getItem("user_openai_key");
             const geminiKey = localStorage.getItem("user_gemini_key");
             const openRouterKey = localStorage.getItem("user_openrouter_key");
-            
+
             if (urls.length === 1) {
                 // Single Video Ingestion
                 const response = await fetch(`${API_BASE}/api/ingest`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        url: urls[0], 
-                        provider: provider, 
+                    body: JSON.stringify({
+                        url: urls[0],
+                        provider: provider,
                         project_id: currentProjectId,
                         openai_key: openAiKey,
                         gemini_key: geminiKey,
@@ -377,7 +377,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const data = await response.json();
                 closeIngestModal();
-                
+
                 // Start polling single ingestion status
                 pollIngestionStatus(data.task_id);
             } else {
@@ -385,9 +385,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 const response = await fetch(`${API_BASE}/api/ingest-batch`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        urls: urls, 
-                        provider: provider, 
+                    body: JSON.stringify({
+                        urls: urls,
+                        provider: provider,
                         project_id: currentProjectId,
                         openai_key: openAiKey,
                         gemini_key: geminiKey,
@@ -401,7 +401,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const data = await response.json();
                 closeIngestModal();
-                
+
                 // Start polling batch status
                 pollBatchIngestionStatus(data.batch_task_id);
             }
@@ -442,16 +442,16 @@ document.addEventListener("DOMContentLoaded", () => {
         if (status === "completed") {
             return "completed";
         }
-        
+
         const steps = ["info", "download", "chunk", "index"];
         const stepIndex = steps.indexOf(step);
-        
+
         let activeIndex = -1;
         if (status === "extracting_metadata") activeIndex = 0;
         else if (status === "downloading_subtitles" || status === "downloading") activeIndex = 1;
         else if (status === "processing_package" || status === "processing") activeIndex = 2;
         else if (status === "indexing") activeIndex = 3;
-        
+
         if (status === "failed") {
             // Deduce where the pipeline crashed based on metadata
             let failedIndex = 0;
@@ -467,12 +467,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     failedIndex = 3; // Failed at vector store indexing
                 }
             }
-            
+
             if (stepIndex < failedIndex) return "completed";
             if (stepIndex === failedIndex) return "failed";
             return "pending";
         }
-        
+
         if (stepIndex < activeIndex) return "completed";
         if (stepIndex === activeIndex) return "active";
         return "pending";
@@ -481,12 +481,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Unified UI renderer for Floating Ingestion Progress Widget
     function updateProgressWidget(data) {
         progressWidget.classList.remove("hidden");
-        
+
         // Progress Summary
         const overallPercent = Math.round(data.overall_percent || 0);
         widgetProgressPercent.textContent = `${overallPercent}%`;
         widgetProgressBar.style.width = `${overallPercent}%`;
-        
+
         // Header Text & Close button toggle
         if (data.status === "completed") {
             widgetOverallStatus.textContent = "Ingestion Complete!";
@@ -505,31 +505,31 @@ document.addEventListener("DOMContentLoaded", () => {
             widgetOverallStatus.style.color = "var(--text-primary)";
             btnWidgetClose.classList.add("hidden");
         }
-        
+
         // Active VID Subtitle text
         if (data.current_video_title) {
             widgetActiveTitle.textContent = `Active VID: ${data.current_video_title}`;
         } else {
             widgetActiveTitle.textContent = "Active: Initializing...";
         }
-        
+
         // Render Checklist of Videos
         widgetTasksList.innerHTML = "";
         const videos = data.videos || [];
-        
+
         videos.forEach(video => {
             const li = document.createElement("li");
             li.className = "widget-task-item";
-            
+
             const statusDisplay = formatStatusName(video.status);
-            const statusClass = (video.status === "completed") ? "completed" : 
-                                (video.status === "failed") ? "failed" : "";
-                                
+            const statusClass = (video.status === "completed") ? "completed" :
+                (video.status === "failed") ? "failed" : "";
+
             const infoState = getStepState("info", video.status, video);
             const downloadState = getStepState("download", video.status, video);
             const chunkState = getStepState("chunk", video.status, video);
             const indexState = getStepState("index", video.status, video);
-            
+
             li.innerHTML = `
                 <div class="widget-task-info">
                     <span class="widget-task-title" title="${escapeHtml(video.title || video.url)}">${escapeHtml(video.title || video.url)}</span>
@@ -555,14 +555,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!response.ok) throw new Error("Status lookup failed");
 
                 const data = await response.json();
-                
+
                 // Update detailed floating widget UI
                 updateProgressWidget(data);
-                
+
                 if (data.status === "completed") {
                     clearInterval(interval);
                     loadVideos(); // Refresh library
-                    
+
                     // Add success message in chat
                     appendMessage("assistant", `Successfully ingested and indexed: **${data.title}**. You can now ask questions about it!`);
                 } else if (data.status === "failed") {
@@ -584,14 +584,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!response.ok) throw new Error("Batch status lookup failed");
 
                 const data = await response.json();
-                
+
                 // Update detailed floating widget UI
                 updateProgressWidget(data);
 
                 if (data.status === "completed" || data.status === "completed_with_errors") {
                     clearInterval(interval);
                     loadVideos(); // Refresh library
-                    
+
                     appendMessage("assistant", `Batch ingestion finished: **${data.completed_videos} out of ${data.total_videos}** videos successfully indexed!`);
                 } else if (data.status === "failed") {
                     clearInterval(interval);
@@ -606,7 +606,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Helper: format task status string for user view
     function formatStatusName(status) {
-        switch(status) {
+        switch (status) {
             case "extracting_metadata": return "Info Extraction...";
             case "downloading_subtitles": return "Subtitles Download...";
             case "downloading": return "Downloading...";
@@ -624,7 +624,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Chat Message Submission
     // -------------------------------------------------------------
-    
+
     chatForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const messageText = chatInput.value.trim();
@@ -727,19 +727,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Project Switcher & Management Logic
     // -------------------------------------------------------------
-    
+
     async function loadProjects() {
         try {
             const response = await fetch(`${API_BASE}/api/projects`);
             if (!response.ok) throw new Error("Failed to load groups list");
             const projects = await response.json();
-            
+
             groupList.innerHTML = "";
             projects.forEach(proj => {
                 const li = document.createElement("li");
                 li.className = `group-item${proj === currentProjectId ? ' active' : ''}`;
                 li.setAttribute("data-id", proj);
-                
+
                 li.innerHTML = `
                     <div class="group-item-clickable">
                         <span class="group-icon">📁</span>
@@ -749,12 +749,12 @@ document.addEventListener("DOMContentLoaded", () => {
                         <button type="button" class="btn-delete-group" data-id="${escapeHtml(proj)}" title="Delete Group">🗑️</button>
                     ` : ''}
                 `;
-                
+
                 // Clicking the group name selects it
                 li.querySelector(".group-item-clickable").addEventListener("click", () => {
                     selectGroup(proj);
                 });
-                
+
                 // Wire up delete button if present
                 const btnDel = li.querySelector(".btn-delete-group");
                 if (btnDel) {
@@ -763,17 +763,17 @@ document.addEventListener("DOMContentLoaded", () => {
                         deleteGroup(proj);
                     });
                 }
-                
+
                 groupList.appendChild(li);
             });
-            
+
             if (!projects.includes(currentProjectId)) {
                 currentProjectId = projects[0] || "default";
             }
-            
+
             // Sync group header title
             activeProjectName.textContent = currentProjectId;
-            
+
             loadChatHistory();
             loadVideos();
         } catch (err) {
@@ -785,7 +785,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentProjectId === groupId) return;
         currentProjectId = groupId;
         activeProjectName.textContent = currentProjectId;
-        
+
         // Update active class in list UI
         const items = groupList.querySelectorAll(".group-item");
         items.forEach(item => {
@@ -795,7 +795,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 item.classList.remove("active");
             }
         });
-        
+
         loadChatHistory();
         loadVideos();
     }
@@ -832,25 +832,25 @@ document.addEventListener("DOMContentLoaded", () => {
     async function saveGroup() {
         const name = inlineGroupName.value.trim();
         if (!name) return;
-        
+
         try {
             const response = await fetch(`${API_BASE}/api/projects`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: name })
             });
-            
+
             if (!response.ok) {
                 throw new Error(await getErrorMessage(response, "Failed to create group"));
             }
-            
+
             const data = await response.json();
             currentProjectId = data.project_id;
-            
+
             // Reset & hide creator
             inlineGroupForm.classList.add("hidden");
             inlineGroupName.value = "";
-            
+
             loadChatHistory();
             await loadProjects();
         } catch (err) {
@@ -860,19 +860,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Delete group handler
     async function deleteGroup(projId) {
-        const confirmMsg = projId === "default" 
+        const confirmMsg = projId === "default"
             ? "Are you sure you want to clear the default group? All its knowledge files will be wiped."
             : `Are you sure you want to delete the group '${projId}' and all its data? This cannot be undone.`;
-            
+
         if (!confirm(confirmMsg)) return;
-        
+
         try {
             const response = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projId)}`, {
                 method: "DELETE"
             });
-            
+
             if (!response.ok) throw new Error("Failed to delete group");
-            
+
             if (currentProjectId === projId) {
                 currentProjectId = "default";
             }
@@ -905,7 +905,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             activeChatHistory = [];
         }
-        
+
         if (activeChatHistory.length > 0) {
             if (welcomeContainer) {
                 welcomeContainer.classList.add("hidden");
@@ -939,13 +939,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const originalText = btnBatchDownload.innerHTML;
             btnBatchDownload.disabled = true;
             btnBatchDownload.innerHTML = "⏳";
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(currentProjectId)}/export-batch`);
                 if (!response.ok) {
                     throw new Error(await getErrorMessage(response, "Batch export failed"));
                 }
-                
+
                 const blob = await response.blob();
                 const downloadUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -994,17 +994,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Library Video Ingested List Loading & Filter
     // -------------------------------------------------------------
-    
+
     async function loadVideos() {
         try {
             const response = await fetch(`${API_BASE}/api/videos?project_id=${encodeURIComponent(currentProjectId)}`);
             if (!response.ok) throw new Error("Failed to load videos list");
-            
+
             const videos = await response.json();
-            
+
             // Sync count display
             videoCount.textContent = `${videos.length} VID${videos.length === 1 ? '' : 's'}`;
-            
+
             // Clear existing list items (except welcome/empty messages)
             const oldItems = videoList.querySelectorAll(".video-item");
             oldItems.forEach(item => item.remove());
@@ -1014,14 +1014,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 emptyVideosMsg.textContent = "No VIDs ingested yet. Click 'Ingest VIDs' above!";
                 return;
             }
-            
+
             emptyVideosMsg.classList.add("hidden");
-            
+
             // Render video library items
             videos.forEach(video => {
                 const li = document.createElement("li");
                 li.className = "video-item";
-                
+
                 li.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <span style="font-size: 0.95rem;">📹</span>
@@ -1061,7 +1061,7 @@ document.addEventListener("DOMContentLoaded", () => {
     videoSearch.addEventListener("input", (e) => {
         const query = e.target.value.toLowerCase().trim();
         const items = videoList.querySelectorAll(".video-item");
-        
+
         items.forEach(item => {
             const title = item.querySelector("h4").textContent.toLowerCase();
             if (title.includes(query)) {
@@ -1070,7 +1070,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 item.classList.add("hidden");
             }
         });
-        
+
         // Empty message handler on search mismatch
         const visibleItems = videoList.querySelectorAll(".video-item:not(.hidden)");
         if (visibleItems.length === 0 && items.length > 0) {
@@ -1113,27 +1113,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const btnRaw = e.target.closest(".btn-export-md");
         const btnAI = e.target.closest(".btn-export-ai");
-        
+
         if (!btnRaw && !btnAI) return;
-        
+
         const btn = btnRaw || btnAI;
         const useAI = !!btnAI;
         const videoId = btn.getAttribute("data-id");
         const originalText = btn.innerHTML;
-        
+
         const videoItem = btn.closest(".video-item");
         const videoTitle = videoItem ? videoItem.querySelector("h4").textContent : "Video";
         const actionsGroup = btn.closest(".video-item-actions");
-        
+
         btn.disabled = true;
         btn.innerHTML = useAI ? "Polishing... ✨" : "Exporting... ⏳";
         if (actionsGroup) actionsGroup.classList.add("loading");
-        
+
         try {
             // Include active provider and model in query parameters for AI polishing
             const provider = providerSelect.value;
             const model = modelSelect.value;
-            
+
             // Get keys from local storage
             const openAiKey = localStorage.getItem("user_openai_key");
             const geminiKey = localStorage.getItem("user_gemini_key");
@@ -1142,7 +1142,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const openRouterKey = localStorage.getItem("user_openrouter_key");
 
             const url = `${API_BASE}/api/videos/${encodeURIComponent(videoId)}/export?project_id=${encodeURIComponent(currentProjectId)}&use_ai=${useAI}&provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`;
-            
+
             // Add custom API headers if we have them
             const headers = {};
             if (openAiKey) headers["X-Openai-Key"] = openAiKey;
@@ -1156,13 +1156,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!response.ok) {
                     throw new Error(await getErrorMessage(response, "Export failed"));
                 }
-                
+
                 // If the backend returned 202, it means the polishing task is running in the background
                 if (response.status === 202) {
                     const statusData = await response.json();
-                    
+
                     let activeToast = showToast(`Starting AI Polishing for "${escapeHtml(videoTitle)}"...`, "polish", 30000);
-                    
+
                     // Poll the status API
                     const pollInterval = setInterval(async () => {
                         try {
@@ -1197,9 +1197,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     }, 3000);
                     return;
                 }
-                
+
                 const blob = await response.blob();
-                
+
                 // Extract filename from response header
                 const disposition = response.headers.get("content-disposition");
                 let filename = useAI ? "polished_summary.md" : "transcript.md";
@@ -1210,7 +1210,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         filename = matches[1].replace(/['"]/g, '');
                     }
                 }
-                
+
                 const downloadUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = downloadUrl;
@@ -1219,15 +1219,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 a.click();
                 a.remove();
                 window.URL.revokeObjectURL(downloadUrl);
-                
+
                 btn.disabled = false;
                 btn.innerHTML = originalText;
                 if (actionsGroup) actionsGroup.classList.remove("loading");
                 showToast(`Downloaded: ${filename}`, "success");
             };
-            
+
             await makeExportRequest();
-            
+
         } catch (err) {
             showToast("Export error: " + err.message, "error");
             btn.disabled = false;
@@ -1239,7 +1239,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
     // Chat Message Rendering Helpers
     // -------------------------------------------------------------
-    
+
     // DOM-only append helper
     function appendMessageDOM(sender, text) {
         if (welcomeContainer) {
@@ -1248,13 +1248,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const messageDiv = document.createElement("div");
         messageDiv.className = `message ${sender}-message`;
-        
+
         // Detect error
         const isError = sender === "assistant" && text.includes("[Error");
         if (isError) {
             messageDiv.classList.add("error-message");
         }
-        
+
         const avatarDiv = document.createElement("div");
         avatarDiv.className = "message-avatar";
         avatarDiv.textContent = isError ? "⚠️" : (sender === "user" ? "👤" : "🔮");
@@ -1285,13 +1285,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Markdown conversion & citations rendering
     function formatMarkdownCitations(text) {
         if (!text) return "";
-        
+
         // Detect error blocks in the text
         const errorIndex = text.indexOf("[Error");
         if (errorIndex !== -1) {
             const normalText = text.substring(0, errorIndex).trim();
             const errorText = text.substring(errorIndex);
-            
+
             let html = "";
             if (normalText) {
                 html += formatMarkdownNormal(normalText) + "<br><br>";
@@ -1299,18 +1299,18 @@ document.addEventListener("DOMContentLoaded", () => {
             html += formatCleanError(errorText);
             return html;
         }
-        
+
         return formatMarkdownNormal(text);
     }
 
     function formatMarkdownNormal(text) {
         // Escape HTML
         let clean = escapeHtml(text);
-        
+
         // Convert bold/italic tags
         clean = clean.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
         clean = clean.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        
+
         // Match Markdown Links: [Citation Text](URL)
         clean = clean.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, (match, text, url) => {
             return `<a href="${url}" target="_blank" title="Jump to timestamp in VID">⏱️ ${text}</a>`;
@@ -1335,20 +1335,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 errorMsg = errorMsg.substring(1, errorMsg.length - 1).trim();
             }
         }
-        
+
         let cleanMsg = escapeHtml(errorMsg);
         let title = "Response Generation Failed";
         let description = "";
         let details = "";
-        
+
         const lowerMsg = cleanMsg.toLowerCase();
-        
+
         // Check for Gemini/Google API Quota Error
         if (lowerMsg.includes("429") || lowerMsg.includes("quota")) {
             title = "API Quota Exceeded (429)";
             description = "You have exceeded the request rate limits or token quota for this model. Please wait a minute before retrying, or switch to a different model/provider.";
             details = cleanMsg;
-        } 
+        }
         // Check for Model Decommissioned / Model Not Found / 404
         else if (lowerMsg.includes("decommissioned") || lowerMsg.includes("not found") || lowerMsg.includes("404")) {
             title = "AI Model Deprecated or Not Found";
@@ -1371,7 +1371,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 details = cleanMsg;
             }
         }
-        
+
         // Build styled HTML alert
         let html = `
             <div class="error-bubble-container">
@@ -1382,7 +1382,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <p class="error-bubble-desc">${description}</p>
                 </div>
         `;
-        
+
         if (details) {
             // Make any URLs inside the technical details clickable
             let clickableDetails = details.replace(/(https?:\/\/[^\s\)]+)/g, '<a href="$1" target="_blank">$1</a>');
@@ -1393,18 +1393,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 </details>
             `;
         }
-        
+
         html += `</div>`;
         return html;
     }
 
     function escapeHtml(unsafe) {
         return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     // Helper: Safely parse error messages from server responses
@@ -1431,32 +1431,32 @@ document.addEventListener("DOMContentLoaded", () => {
             container.id = "toast-container";
             document.body.appendChild(container);
         }
-        
+
         const toast = document.createElement("div");
         toast.className = `toast-message ${type}`;
-        
+
         let icon = "ℹ️";
         if (type === "success") icon = "✅";
         if (type === "error") icon = "⚠️";
         if (type === "polish") icon = "✨";
-        
+
         toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${message}</span>`;
         container.appendChild(toast);
-        
+
         // Trigger reflow & show
         setTimeout(() => toast.classList.add("show"), 10);
-        
+
         // Hide and remove helper
         const removeToast = () => {
             toast.classList.remove("show");
             toast.classList.add("hide");
             setTimeout(() => toast.remove(), 300);
         };
-        
+
         if (duration > 0) {
             setTimeout(removeToast, duration);
         }
-        
+
         return {
             element: toast,
             update: (newMessage) => {

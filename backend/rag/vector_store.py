@@ -67,6 +67,9 @@ class LocalVectorStore:
             return response.data[0].embedding
         elif provider == "local-ai":
             if self._model is None:
+                import logging
+                logging.getLogger("huggingface_hub.utils._headers").setLevel(logging.ERROR)
+                logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
                 try:
                     from sentence_transformers import SentenceTransformer
                 except ImportError:
