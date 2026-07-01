@@ -34,13 +34,106 @@ class VideoDownloader:
             
         return None
 
+    def get_youtube_video_id(self, url):
+        pattern = r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|v/|shorts/)|youtu\.be/)([\w-]{11})'
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+        return None
+
     def download_subtitles(self, url, progress_callback=None):
         """Downloads subtitles/auto-captions from YouTube.
         
         Returns info dictionary containing segments parsed from subtitles.
         """
-        # First extract metadata
-        info = self.extract_info(url)
+        video_id = self.get_youtube_video_id(url)
+        info = None
+        extract_err = None
+        
+        # Try extracting metadata with yt-dlp first
+        try:
+            info = self.extract_info(url)
+        except Exception as e:
+            extract_err = e
+            print(f"yt-dlp extract_info failed: {e}")
+            
+        # If we got info, let's try standard download method
+        if info:
+            try:
+                return self._download_subtitles_ytdlp(url, info, progress_callback)
+            except Exception as ytdlp_err:
+                print(f"yt-dlp subtitle download failed: {ytdlp_err}. Trying youtube-transcript-api fallback...")
+                
+        # Fallback to youtube-transcript-api
+        if video_id:
+            try:
+                if progress_callback:
+                    progress_callback("extracting_subtitles_fallback", 40)
+                return self._download_subtitles_transcript_api(url, video_id, info, progress_callback)
+            except Exception as api_err:
+                print(f"youtube-transcript-api fallback failed: {api_err}")
+                raise Exception(f"Failed to fetch subtitles. yt-dlp error: {extract_err or 'None'}. transcript-api error: {api_err}")
+        else:
+            if extract_err:
+                raise extract_err
+            raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
+
+    def _download_subtitles_transcript_api(self, url, video_id, info=None, progress_callback=None):
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        if progress_callback:
+            progress_callback("fetching_transcript_api", 50)
+            
+        api = YouTubeTranscriptApi()
+        transcript_list = api.list(video_id)
+        
+        pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
+        
+        try:
+            transcript = transcript_list.find_transcript(pref_langs)
+        except Exception as e:
+            # Fallback: get whatever first transcript is available
+            try:
+                transcript = next(iter(transcript_list))
+            except StopIteration:
+                raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
+                
+        data = transcript.fetch()
+        
+        segments = []
+        for seg in data:
+            segments.append({
+                "start": seg.start,
+                "end": seg.start + seg.duration,
+                "text": seg.text
+            })
+            
+        # If we didn't get info from yt-dlp, scrape title from webpage or make standard fallback info dict
+        if not info:
+            title = f"YouTube Video {video_id}"
+            try:
+                import urllib.request
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, ...)'})
+                html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
+                title_match = re.search(r'<title>(.*?)</title>', html)
+                if title_match:
+                    title = title_match.group(1).replace(" - YouTube", "").strip()
+            except Exception as e:
+                print(f"Scraping title failed: {e}")
+                
+            info = {
+                "id": video_id,
+                "title": title,
+                "duration": segments[-1]["end"] if segments else 0,
+                "uploader": "Unknown",
+                "webpage_url": url,
+                "extractor": "youtube",
+            }
+            
+        info["segments"] = segments
+        return info
+
+    def _download_subtitles_ytdlp(self, url, info, progress_callback=None):
         video_id = info["id"]
         safe_video_id = re.sub(r'[^\w\-_]', '', video_id)
         
@@ -195,7 +288,8 @@ class VideoDownloader:
             info["segments"] = segments
             return info
         except Exception as e:
-                raise Exception(f"Failed to fetch subtitles: {str(e)}")
+            raise Exception(f"Failed to fetch subtitles: {str(e)}")
+
 
     def _parse_vtt(self, file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
