@@ -232,12 +232,14 @@
                 <div class="form-group">
                     <label for="ingest-provider-select">Search/Embedding Method</label>
                     <select id="ingest-provider-select" class="custom-select" style="width: 100%; border-radius: 0.5rem; height: 38px; margin-top: 0.25rem; padding: 0 0.75rem;">
-                        <option value="local" selected>Local TF-IDF (Free, offline, fast, no quota limits) 🚀</option>
+                        <option value="local-ai" selected>Local AI (Sentence-Transformers E5 - Free Semantic Search) 💻</option>
                         <option value="gemini">Gemini Embeddings (Requires Gemini Key)</option>
                         <option value="openai">OpenAI Embeddings (Requires OpenAI Key)</option>
                         <option value="openrouter">OpenRouter Embeddings (Requires OpenRouter Key)</option>
                     </select>
-                    <span class="form-tip">Choose how transcripts are indexed. Local TF-IDF runs offline, uses 0 tokens, and is completely free.</span>
+                    <div id="ingest-method-note" style="margin-top: 0.5rem; padding: 0.75rem; background: rgba(16, 185, 129, 0.06); border-left: 3px solid var(--text-success); border-radius: 0.35rem; font-size: 0.75rem; line-height: 1.4; color: var(--text-secondary); transition: var(--transition-smooth);">
+                        💻 <strong>Local AI (Sentence-Transformers):</strong> Sử dụng mô hình AI <code>intfloat/multilingual-e5-small</code> (~180MB) chạy hoàn toàn offline trên CPU. Tự động tải mô hình ở lần chạy đầu tiên. <strong>Tìm kiếm ngữ nghĩa (Semantic Search), hiểu từ đồng nghĩa, miễn phí và không tốn quota API!</strong>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>

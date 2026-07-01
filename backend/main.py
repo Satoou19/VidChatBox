@@ -156,9 +156,9 @@ def run_ingestion_pipeline(task_id: str, url: str, provider: str = "gemini", pro
             "percent": 90.0
         })
         
-        # Resolve valid embedding provider (local, gemini, openai, or openrouter)
-        if provider == "local":
-            emb_provider = "local"
+        # Resolve valid embedding provider (local, local-ai, gemini, openai, or openrouter)
+        if provider in ["local", "local-ai"]:
+            emb_provider = provider
             emb_key = None
         else:
             emb_provider = "gemini"
@@ -271,9 +271,9 @@ def run_batch_ingestion_pipeline(batch_task_id: str, urls: List[str], provider: 
             video_entry["status"] = "indexing"
             video_entry["percent"] = 95.0
             
-            # Resolve valid embedding provider (local, gemini, openai, or openrouter)
-            if provider == "local":
-                emb_provider = "local"
+            # Resolve valid embedding provider (local, local-ai, gemini, openai, or openrouter)
+            if provider in ["local", "local-ai"]:
+                emb_provider = provider
                 emb_key = None
             else:
                 emb_provider = "gemini"
@@ -1046,7 +1046,11 @@ def run_chat(
             embedding_provider = "local"
         else:
             stored_dim = len(first_emb)
-            if stored_dim == 3072 and embedding_provider != "gemini":
+            if stored_dim == 384:
+                embedding_provider = "local-ai"
+            elif stored_dim == 768:
+                embedding_provider = "gemini"
+            elif stored_dim == 3072 and embedding_provider != "gemini":
                 embedding_provider = "gemini"
             elif stored_dim == 1536 and embedding_provider == "gemini":
                 if o_key_valid:
@@ -1067,7 +1071,7 @@ def run_chat(
         emb_key = gemini_key
     elif embedding_provider == "openai":
         emb_key = openai_key
-    elif embedding_provider == "local":
+    elif embedding_provider in ["local", "local-ai"]:
         emb_key = None
     else:
         emb_key = openrouter_key

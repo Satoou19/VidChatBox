@@ -9,6 +9,7 @@ class LocalVectorStore:
         self.data_dir = data_dir
         self.db_path = os.path.join(data_dir, "vector_store.json")
         os.makedirs(data_dir, exist_ok=True)
+        self._model = None
         
         # Load existing data if it exists
         self.data = self._load_db()
@@ -26,8 +27,8 @@ class LocalVectorStore:
         with open(self.db_path, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
 
-    def get_embedding(self, text, provider="gemini", api_key=None):
-        """Generates embedding for a given text using Gemini or OpenAI."""
+    def get_embedding(self, text, provider="gemini", api_key=None, is_query=False):
+        """Generates embedding for a given text using Gemini, OpenAI, or local sentence-transformers."""
         if provider == "gemini":
             active_key = api_key or os.getenv("GEMINI_API_KEY")
             if not active_key:
@@ -64,6 +65,26 @@ class LocalVectorStore:
                 model="openai/text-embedding-3-small"
             )
             return response.data[0].embedding
+        elif provider == "local-ai":
+            if self._model is None:
+                try:
+                    from sentence_transformers import SentenceTransformer
+                except ImportError:
+                    raise ImportError(
+                        "The 'sentence-transformers' library is not installed. "
+                        "Please run `pip install sentence-transformers` to use Local AI embedding."
+                    )
+                # Load the multilingual-e5-small model
+                self._model = SentenceTransformer("intfloat/multilingual-e5-small")
+            
+            # E5 models expect a prefix: "query: " for queries and "passage: " for passages
+            prefixed_text = text
+            if not text.startswith("query:") and not text.startswith("passage:"):
+                prefix = "query: " if is_query else "passage: "
+                prefixed_text = prefix + text
+                
+            emb = self._model.encode(prefixed_text, convert_to_numpy=True)
+            return emb.tolist()
         else:
             raise ValueError(f"Unknown embedding provider: {provider}")
 
@@ -84,7 +105,7 @@ class LocalVectorStore:
                 if provider == "local":
                     embedding = None
                 else:
-                    embedding = self.get_embedding(text_to_embed, provider=provider, api_key=api_key)
+                    embedding = self.get_embedding(text_to_embed, provider=provider, api_key=api_key, is_query=False)
                 
                 # Append to our local store
                 chunk_data = {
@@ -221,7 +242,7 @@ class LocalVectorStore:
             return self.search_local_tfidf(query, top_k=top_k)
 
         # Generate query embedding
-        query_emb = self.get_embedding(query, provider=provider, api_key=api_key)
+        query_emb = self.get_embedding(query, provider=provider, api_key=api_key, is_query=True)
         query_vector = np.array(query_emb)
         
         # Build matrices for vector operations

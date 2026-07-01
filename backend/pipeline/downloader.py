@@ -34,16 +34,22 @@ class VideoDownloader:
             
         return None
 
+    def _get_youtube_proxies(self):
+        """Returns a list of all configured proxies from the YOUTUBE_PROXY env var."""
+        import re
+        proxies_env = os.getenv("YOUTUBE_PROXY")
+        if not proxies_env:
+            return []
+        return [p.strip() for p in re.split(r'[,\n;]', proxies_env) if p.strip()]
+
     def _get_youtube_proxy(self):
         """Returns a random proxy from the comma/newline/semicolon separated YOUTUBE_PROXY env var, or None."""
         import random
-        proxies_env = os.getenv("YOUTUBE_PROXY")
-        if not proxies_env:
-            return None
-        proxies = [p.strip() for p in re.split(r'[,\n;]', proxies_env) if p.strip()]
+        proxies = self._get_youtube_proxies()
         if not proxies:
             return None
         return random.choice(proxies)
+
 
     def get_youtube_video_id(self, url):
         pattern = r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|v/|shorts/)|youtu\.be/)([\w-]{11})'
@@ -93,17 +99,12 @@ class VideoDownloader:
         from youtube_transcript_api import YouTubeTranscriptApi
         import requests
         import http.cookiejar
+        import random
         
         if progress_callback:
             progress_callback("fetching_transcript_api", 50)
             
         session = requests.Session()
-        youtube_proxy = self._get_youtube_proxy()
-        if youtube_proxy:
-            session.proxies = {
-                "http": youtube_proxy,
-                "https": youtube_proxy
-            }
         cookie_file = self._get_cookiefile_path()
         if cookie_file and os.path.exists(cookie_file):
             try:
@@ -113,8 +114,33 @@ class VideoDownloader:
             except Exception as e:
                 print(f"Warning: Failed to load cookies for youtube-transcript-api: {e}")
                 
-        api = YouTubeTranscriptApi(http_client=session)
-        transcript_list = api.list(video_id)
+        proxies = self._get_youtube_proxies()
+        random.shuffle(proxies)
+        
+        transcript_list = None
+        last_err = None
+        
+        for proxy in proxies:
+            session.proxies = {
+                "http": proxy,
+                "https": proxy
+            }
+            try:
+                api = YouTubeTranscriptApi(http_client=session)
+                transcript_list = api.list(video_id)
+                break
+            except Exception as e:
+                print(f"Warning: youtube-transcript-api failed with proxy {proxy}: {e}. Trying next proxy...")
+                last_err = e
+                
+        if not transcript_list:
+            session.proxies = {}
+            try:
+                api = YouTubeTranscriptApi(http_client=session)
+                transcript_list = api.list(video_id)
+            except Exception as direct_err:
+                print(f"Error: youtube-transcript-api direct retry failed: {direct_err}")
+                raise Exception(f"Failed to fetch transcripts (all proxies & direct failed). Last proxy error: {last_err or 'None'}. Direct error: {direct_err}")
         
         pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
         
@@ -257,32 +283,50 @@ class VideoDownloader:
             cookie_file = self._get_cookiefile_path()
             
             download_success = False
-            try:
-                import requests
-                import http.cookiejar
-                session = requests.Session()
-                youtube_proxy = self._get_youtube_proxy()
-                if youtube_proxy:
-                    session.proxies = {
-                        "http": youtube_proxy,
-                        "https": youtube_proxy
-                    }
-                if cookie_file and os.path.exists(cookie_file):
-                    cj = http.cookiejar.MozillaCookieJar(cookie_file)
-                    cj.load(ignore_discard=True, ignore_expires=True)
-                    session.cookies = cj
-                    
-                response = session.get(vtt_url, headers=headers, timeout=15)
-                response.raise_for_status()
-                with open(vtt_path, 'wb') as out_file:
-                    out_file.write(response.content)
-                    
-                if os.path.exists(vtt_path) and os.path.getsize(vtt_path) > 0:
-                    download_success = True
-            except Exception as url_err:
-                print(f"Direct VTT download failed ({url_err}), falling back to yt-dlp...")
+            
+            # --- Try Direct VTT download rotating proxies ---
+            import requests
+            import http.cookiejar
+            import random
+            session = requests.Session()
+            if cookie_file and os.path.exists(cookie_file):
+                cj = http.cookiejar.MozillaCookieJar(cookie_file)
+                cj.load(ignore_discard=True, ignore_expires=True)
+                session.cookies = cj
                 
-            # Fallback: use yt-dlp directly to download subtitle (handles cloud IPs, 429 retries, formatting)
+            proxies = self._get_youtube_proxies()
+            random.shuffle(proxies)
+            
+            for proxy in proxies:
+                session.proxies = {
+                    "http": proxy,
+                    "https": proxy
+                }
+                try:
+                    response = session.get(vtt_url, headers=headers, timeout=15)
+                    response.raise_for_status()
+                    with open(vtt_path, 'wb') as out_file:
+                        out_file.write(response.content)
+                    if os.path.exists(vtt_path) and os.path.getsize(vtt_path) > 0:
+                        download_success = True
+                        break
+                except Exception as req_err:
+                    print(f"Warning: Direct VTT download via proxy {proxy} failed ({req_err}). Trying next proxy...")
+                    
+            # Fallback: direct download without proxy
+            if not download_success:
+                session.proxies = {}
+                try:
+                    response = session.get(vtt_url, headers=headers, timeout=15)
+                    response.raise_for_status()
+                    with open(vtt_path, 'wb') as out_file:
+                        out_file.write(response.content)
+                    if os.path.exists(vtt_path) and os.path.getsize(vtt_path) > 0:
+                        download_success = True
+                except Exception as direct_err:
+                    print(f"Direct VTT download failed ({direct_err}), falling back to yt-dlp...")
+                
+            # Fallback: use yt-dlp directly to download subtitle, rotating proxies
             if not download_success:
                 ydl_opts = {
                     'quiet': True,
@@ -299,17 +343,36 @@ class VideoDownloader:
                 }
                 if cookie_file:
                     ydl_opts['cookiefile'] = cookie_file
-                youtube_proxy = self._get_youtube_proxy()
-                if youtube_proxy:
-                    ydl_opts['proxy'] = youtube_proxy
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
                 
-                for f in os.listdir(subs_dir):
-                    if f.startswith(f"subs_{safe_video_id}") and f.endswith(".vtt"):
-                        vtt_path = os.path.join(subs_dir, f)
-                        download_success = True
-                        break
+                for proxy in proxies:
+                    ydl_opts['proxy'] = proxy
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            ydl.download([url])
+                        for f in os.listdir(subs_dir):
+                            if f.startswith(f"subs_{safe_video_id}") and f.endswith(".vtt"):
+                                vtt_path = os.path.join(subs_dir, f)
+                                download_success = True
+                                break
+                        if download_success:
+                            break
+                    except Exception as ydl_err:
+                        print(f"Warning: yt-dlp subtitle download with proxy {proxy} failed ({ydl_err}). Trying next...")
+                
+                # Fallback to direct download using yt-dlp without proxy
+                if not download_success:
+                    if 'proxy' in ydl_opts:
+                        del ydl_opts['proxy']
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            ydl.download([url])
+                        for f in os.listdir(subs_dir):
+                            if f.startswith(f"subs_{safe_video_id}") and f.endswith(".vtt"):
+                                vtt_path = os.path.join(subs_dir, f)
+                                download_success = True
+                                break
+                    except Exception as direct_ydl_err:
+                        print(f"Direct yt-dlp download failed: {direct_ydl_err}")
 
             if not download_success or not os.path.exists(vtt_path):
                 raise FileNotFoundError("No subtitle files downloaded successfully.")
@@ -383,14 +446,10 @@ class VideoDownloader:
         return deduped
 
     def extract_info(self, url):
-        """Extracts video metadata using yt-dlp without downloading."""
+        """Extracts video metadata using yt-dlp, rotating proxies if they fail, and falling back to direct."""
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            # ignore_no_formats_error: if format selection finds nothing, warn
-            # instead of raising. This lets process_video_result() complete and
-            # populate automatic_captions/subtitles even when no video formats
-            # are available (e.g. restricted formats, certain player clients).
             'ignore_no_formats_error': True,
             'skip_download': True,
             'youtube_include_dash_manifest': False,
@@ -403,25 +462,42 @@ class VideoDownloader:
         if cookie_file:
             ydl_opts['cookiefile'] = cookie_file
             
-        youtube_proxy = self._get_youtube_proxy()
-        if youtube_proxy:
-            ydl_opts['proxy'] = youtube_proxy
-            
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        proxies = self._get_youtube_proxies()
+        import random
+        random.shuffle(proxies)
+        
+        last_err = None
+        info = None
+        
+        for proxy in proxies:
+            ydl_opts['proxy'] = proxy
             try:
-                info = ydl.extract_info(url, download=False)
-                return {
-                    "id": info.get("id"),
-                    "title": info.get("title"),
-                    "duration": info.get("duration"),
-                    "uploader": info.get("uploader"),
-                    "webpage_url": info.get("webpage_url"),
-                    "extractor": info.get("extractor"),
-                    "subtitles": info.get("subtitles", {}),
-                    "automatic_captions": info.get("automatic_captions", {}),
-                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                break
             except Exception as e:
-                raise Exception(f"Failed to extract video info: {str(e)}")
+                print(f"Warning: yt-dlp extract_info failed with proxy {proxy}: {e}. Trying next proxy...")
+                last_err = e
+                
+        if not info:
+            if 'proxy' in ydl_opts:
+                del ydl_opts['proxy']
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as direct_err:
+                raise Exception(f"Failed to extract video info (all proxies & direct failed). Last proxy error: {last_err or 'None'}. Direct error: {direct_err}")
+                
+        return {
+            "id": info.get("id"),
+            "title": info.get("title"),
+            "duration": info.get("duration"),
+            "uploader": info.get("uploader"),
+            "webpage_url": info.get("webpage_url"),
+            "extractor": info.get("extractor"),
+            "subtitles": info.get("subtitles", {}),
+            "automatic_captions": info.get("automatic_captions", {}),
+        }
 
     def download_audio(self, url, progress_callback=None):
         """Downloads audio track from YouTube/Twitch URL.
