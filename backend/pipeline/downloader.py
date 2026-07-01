@@ -80,11 +80,23 @@ class VideoDownloader:
 
     def _download_subtitles_transcript_api(self, url, video_id, info=None, progress_callback=None):
         from youtube_transcript_api import YouTubeTranscriptApi
+        import requests
+        import http.cookiejar
         
         if progress_callback:
             progress_callback("fetching_transcript_api", 50)
             
-        api = YouTubeTranscriptApi()
+        session = requests.Session()
+        cookie_file = self._get_cookiefile_path()
+        if cookie_file and os.path.exists(cookie_file):
+            try:
+                cj = http.cookiejar.MozillaCookieJar(cookie_file)
+                cj.load(ignore_discard=True, ignore_expires=True)
+                session.cookies = cj
+            except Exception as e:
+                print(f"Warning: Failed to load cookies for youtube-transcript-api: {e}")
+                
+        api = YouTubeTranscriptApi(http_client=session)
         transcript_list = api.list(video_id)
         
         pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
