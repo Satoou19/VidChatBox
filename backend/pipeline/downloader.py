@@ -78,26 +78,35 @@ class VideoDownloader:
                 
         # 2. Try automatic captions in the video's original language (prevents on-the-fly translation 429s)
         if not selected_lang:
+            orig_key = None
             orig_lang = None
             for key in auto_captions.keys():
                 if key.endswith("-orig"):
+                    orig_key = key
                     orig_lang = key.split("-")[0]
                     break
                     
-            if orig_lang and orig_lang in auto_captions:
+            if orig_key:
                 selected_lang = orig_lang
-                matched_key = orig_lang
+                matched_key = orig_key
                 is_auto = True
             else:
-                # Fallbacks
-                if 'en' in auto_captions:
-                    selected_lang = 'en'
-                    matched_key = 'en'
-                    is_auto = True
-                elif auto_captions:
-                    matched_key = list(auto_captions.keys())[0]
-                    selected_lang = matched_key.split("-")[0]
-                    is_auto = True
+                # Fallbacks: check preferred languages first
+                for lang in pref_langs:
+                    if lang in auto_captions:
+                        selected_lang = lang
+                        matched_key = lang
+                        is_auto = True
+                        break
+                if not selected_lang:
+                    if 'en' in auto_captions:
+                        selected_lang = 'en'
+                        matched_key = 'en'
+                        is_auto = True
+                    elif auto_captions:
+                        matched_key = list(auto_captions.keys())[0]
+                        selected_lang = matched_key.split("-")[0]
+                        is_auto = True
                     
         if not selected_lang or not matched_key:
             raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
@@ -120,15 +129,55 @@ class VideoDownloader:
             if progress_callback:
                 progress_callback("extracting_subtitles", 30)
                 
-            # Download the VTT file directly
+            # Download the VTT file
             import urllib.request
             vtt_path = os.path.join(subs_dir, f"subs_{safe_video_id}.{selected_lang}.vtt")
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+            cookie_file = self._get_cookiefile_path()
             
-            req = urllib.request.Request(vtt_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response, open(vtt_path, 'wb') as out_file:
-                out_file.write(response.read())
+            download_success = False
+            try:
+                if cookie_file and os.path.exists(cookie_file):
+                    import http.cookiejar
+                    cj = http.cookiejar.MozillaCookieJar(cookie_file)
+                    cj.load(ignore_discard=True, ignore_expires=True)
+                    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+                    req = urllib.request.Request(vtt_url, headers=headers)
+                    with opener.open(req) as response, open(vtt_path, 'wb') as out_file:
+                        out_file.write(response.read())
+                else:
+                    req = urllib.request.Request(vtt_url, headers=headers)
+                    with urllib.request.urlopen(req) as response, open(vtt_path, 'wb') as out_file:
+                        out_file.write(response.read())
+                if os.path.exists(vtt_path) and os.path.getsize(vtt_path) > 0:
+                    download_success = True
+            except Exception as url_err:
+                print(f"Direct VTT download failed ({url_err}), falling back to yt-dlp...")
                 
-            if not os.path.exists(vtt_path):
+            # Fallback: use yt-dlp directly to download subtitle (handles cloud IPs, 429 retries, formatting)
+            if not download_success:
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'skip_download': True,
+                    'writesubtitles': not is_auto,
+                    'writeautomaticsub': is_auto,
+                    'subtitleslangs': [matched_key],
+                    'subtitlesformat': 'vtt/best',
+                    'outtmpl': os.path.join(subs_dir, f"subs_{safe_video_id}"),
+                }
+                if cookie_file:
+                    ydl_opts['cookiefile'] = cookie_file
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                
+                for f in os.listdir(subs_dir):
+                    if f.startswith(f"subs_{safe_video_id}") and f.endswith(".vtt"):
+                        vtt_path = os.path.join(subs_dir, f)
+                        download_success = True
+                        break
+
+            if not download_success or not os.path.exists(vtt_path):
                 raise FileNotFoundError("No subtitle files downloaded successfully.")
                 
             # Parse the VTT file
