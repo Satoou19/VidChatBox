@@ -87,6 +87,12 @@ class VideoDownloader:
             progress_callback("fetching_transcript_api", 50)
             
         session = requests.Session()
+        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        if youtube_proxy:
+            session.proxies = {
+                "http": youtube_proxy,
+                "https": youtube_proxy
+            }
         cookie_file = self._get_cookiefile_path()
         if cookie_file and os.path.exists(cookie_file):
             try:
@@ -124,9 +130,9 @@ class VideoDownloader:
         if not info:
             title = f"YouTube Video {video_id}"
             try:
-                import urllib.request
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, ...)'})
-                html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8')
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                response = session.get(url, headers=headers, timeout=10)
+                html = response.text
                 title_match = re.search(r'<title>(.*?)</title>', html)
                 if title_match:
                     title = title_match.group(1).replace(" - YouTube", "").strip()
@@ -235,25 +241,31 @@ class VideoDownloader:
                 progress_callback("extracting_subtitles", 30)
                 
             # Download the VTT file
-            import urllib.request
             vtt_path = os.path.join(subs_dir, f"subs_{safe_video_id}.{selected_lang}.vtt")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
             cookie_file = self._get_cookiefile_path()
             
             download_success = False
             try:
+                import requests
+                import http.cookiejar
+                session = requests.Session()
+                youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                if youtube_proxy:
+                    session.proxies = {
+                        "http": youtube_proxy,
+                        "https": youtube_proxy
+                    }
                 if cookie_file and os.path.exists(cookie_file):
-                    import http.cookiejar
                     cj = http.cookiejar.MozillaCookieJar(cookie_file)
                     cj.load(ignore_discard=True, ignore_expires=True)
-                    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-                    req = urllib.request.Request(vtt_url, headers=headers)
-                    with opener.open(req) as response, open(vtt_path, 'wb') as out_file:
-                        out_file.write(response.read())
-                else:
-                    req = urllib.request.Request(vtt_url, headers=headers)
-                    with urllib.request.urlopen(req) as response, open(vtt_path, 'wb') as out_file:
-                        out_file.write(response.read())
+                    session.cookies = cj
+                    
+                response = session.get(vtt_url, headers=headers, timeout=15)
+                response.raise_for_status()
+                with open(vtt_path, 'wb') as out_file:
+                    out_file.write(response.content)
+                    
                 if os.path.exists(vtt_path) and os.path.getsize(vtt_path) > 0:
                     download_success = True
             except Exception as url_err:
@@ -276,6 +288,9 @@ class VideoDownloader:
                 }
                 if cookie_file:
                     ydl_opts['cookiefile'] = cookie_file
+                youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                if youtube_proxy:
+                    ydl_opts['proxy'] = youtube_proxy
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
                 
@@ -377,6 +392,10 @@ class VideoDownloader:
         if cookie_file:
             ydl_opts['cookiefile'] = cookie_file
             
+        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        if youtube_proxy:
+            ydl_opts['proxy'] = youtube_proxy
+            
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(url, download=False)
@@ -435,6 +454,10 @@ class VideoDownloader:
         cookie_file = self._get_cookiefile_path()
         if cookie_file:
             ydl_opts['cookiefile'] = cookie_file
+            
+        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        if youtube_proxy:
+            ydl_opts['proxy'] = youtube_proxy
             
         # Note: If FFmpeg was available we could do postprocessors, but we intentionally avoid
         # forcing FFmpeg so that raw m4a/webm works fine.

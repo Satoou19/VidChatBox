@@ -20,3 +20,4 @@ backend/data/
 # OS files
 .DS_Store
 Thumbs.db
+working_proxies.md
