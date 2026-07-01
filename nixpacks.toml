@@ -1,2 +1,5 @@
 [phases.setup]
 nixPkgs = ["python3", "nodejs", "deno", "ffmpeg"]
+
+[phases.build]
+cmds = ["python backend/build_model.py"]

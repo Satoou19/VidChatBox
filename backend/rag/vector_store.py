@@ -77,8 +77,16 @@ class LocalVectorStore:
                         "The 'sentence-transformers' library is not installed. "
                         "Please run `pip install sentence-transformers` to use Local AI embedding."
                     )
-                # Load the multilingual-e5-small model
-                self._model = SentenceTransformer("intfloat/multilingual-e5-small")
+                # Check if model is cached locally in the project directory
+                local_model_path = os.path.join(self.data_dir, "models", "multilingual-e5-small")
+                if os.path.exists(local_model_path) and os.listdir(local_model_path):
+                    print(f"Loading local SentenceTransformer model from {local_model_path}...")
+                    self._model = SentenceTransformer(local_model_path)
+                else:
+                    # Fallback to downloading/loading from Hugging Face Hub cache
+                    print("Loading SentenceTransformer model from Hugging Face Hub cache/remote...")
+                    self._model = SentenceTransformer("intfloat/multilingual-e5-small")
+
             
             # E5 models expect a prefix: "query: " for queries and "passage: " for passages
             prefixed_text = text
