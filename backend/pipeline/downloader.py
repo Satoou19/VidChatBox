@@ -118,8 +118,9 @@ class VideoDownloader:
         proxies = self._get_youtube_proxies()
         random.shuffle(proxies)
         
-        transcript_list = None
+        data = None
         last_err = None
+        pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
         
         for proxy in proxies:
             session.proxies = {
@@ -129,32 +130,35 @@ class VideoDownloader:
             try:
                 api = YouTubeTranscriptApi(http_client=session)
                 transcript_list = api.list(video_id)
+                try:
+                    transcript = transcript_list.find_transcript(pref_langs)
+                except Exception:
+                    try:
+                        transcript = next(iter(transcript_list))
+                    except StopIteration:
+                        raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
+                data = transcript.fetch()
                 break
             except Exception as e:
                 print(f"Warning: youtube-transcript-api failed with proxy {proxy}: {e}. Trying next proxy...")
                 last_err = e
                 
-        if not transcript_list:
+        if not data:
             session.proxies = {}
             try:
                 api = YouTubeTranscriptApi(http_client=session)
                 transcript_list = api.list(video_id)
+                try:
+                    transcript = transcript_list.find_transcript(pref_langs)
+                except Exception:
+                    try:
+                        transcript = next(iter(transcript_list))
+                    except StopIteration:
+                        raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
+                data = transcript.fetch()
             except Exception as direct_err:
                 print(f"Error: youtube-transcript-api direct retry failed: {direct_err}")
                 raise Exception(f"Failed to fetch transcripts (all proxies & direct failed). Last proxy error: {last_err or 'None'}. Direct error: {direct_err}")
-        
-        pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
-        
-        try:
-            transcript = transcript_list.find_transcript(pref_langs)
-        except Exception as e:
-            # Fallback: get whatever first transcript is available
-            try:
-                transcript = next(iter(transcript_list))
-            except StopIteration:
-                raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
-                
-        data = transcript.fetch()
         
         segments = []
         for seg in data:
