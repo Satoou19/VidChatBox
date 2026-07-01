@@ -34,6 +34,17 @@ class VideoDownloader:
             
         return None
 
+    def _get_youtube_proxy(self):
+        """Returns a random proxy from the comma/newline/semicolon separated YOUTUBE_PROXY env var, or None."""
+        import random
+        proxies_env = os.getenv("YOUTUBE_PROXY")
+        if not proxies_env:
+            return None
+        proxies = [p.strip() for p in re.split(r'[,\n;]', proxies_env) if p.strip()]
+        if not proxies:
+            return None
+        return random.choice(proxies)
+
     def get_youtube_video_id(self, url):
         pattern = r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|v/|shorts/)|youtu\.be/)([\w-]{11})'
         match = re.search(pattern, url)
@@ -87,7 +98,7 @@ class VideoDownloader:
             progress_callback("fetching_transcript_api", 50)
             
         session = requests.Session()
-        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        youtube_proxy = self._get_youtube_proxy()
         if youtube_proxy:
             session.proxies = {
                 "http": youtube_proxy,
@@ -250,7 +261,7 @@ class VideoDownloader:
                 import requests
                 import http.cookiejar
                 session = requests.Session()
-                youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                youtube_proxy = self._get_youtube_proxy()
                 if youtube_proxy:
                     session.proxies = {
                         "http": youtube_proxy,
@@ -288,7 +299,7 @@ class VideoDownloader:
                 }
                 if cookie_file:
                     ydl_opts['cookiefile'] = cookie_file
-                youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                youtube_proxy = self._get_youtube_proxy()
                 if youtube_proxy:
                     ydl_opts['proxy'] = youtube_proxy
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -392,7 +403,7 @@ class VideoDownloader:
         if cookie_file:
             ydl_opts['cookiefile'] = cookie_file
             
-        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        youtube_proxy = self._get_youtube_proxy()
         if youtube_proxy:
             ydl_opts['proxy'] = youtube_proxy
             
@@ -455,7 +466,7 @@ class VideoDownloader:
         if cookie_file:
             ydl_opts['cookiefile'] = cookie_file
             
-        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        youtube_proxy = self._get_youtube_proxy()
         if youtube_proxy:
             ydl_opts['proxy'] = youtube_proxy
             
