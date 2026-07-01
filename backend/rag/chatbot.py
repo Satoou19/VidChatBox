@@ -119,7 +119,7 @@ class RAGChatbot:
             if not self.gemini_api_key:
                 raise ValueError("GEMINI_API_KEY is not set.")
                 
-            model_name = model if model else "gemini-1.5-flash"
+            model_name = model if model else "gemini-3.5-flash"
             model_obj = genai.GenerativeModel(
                 model_name=model_name,
                 system_instruction=system_prompt

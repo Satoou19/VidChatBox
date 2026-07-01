@@ -6,7 +6,7 @@ import json
 from typing import List, Optional
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Response, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -21,7 +21,8 @@ from backend.pipeline.project_manager import (
     list_projects,
     create_project,
     delete_project,
-    generate_markdown
+    generate_markdown,
+    format_timestamp
 )
 
 # Load environment variables
@@ -44,6 +45,9 @@ ingestion_tasks = {}
 
 # batch_task_id -> { "status": str, "total_videos": int, "completed_videos": int, "current_index": int, ... }
 batch_tasks = {}
+
+# polishing_task_id -> { "status": str, "percent": float, "error": str }
+polishing_tasks = {}
 
 # Initialize configurations
 DATA_DIR = os.getenv("DATA_DIR", "./backend/data")
@@ -152,24 +156,28 @@ def run_ingestion_pipeline(task_id: str, url: str, provider: str = "gemini", pro
             "percent": 90.0
         })
         
-        # Resolve valid embedding provider (gemini, openai, or openrouter)
-        emb_provider = "gemini"
-        if provider in ["gemini", "openai", "openrouter"]:
-            emb_provider = provider
+        # Resolve valid embedding provider (local, gemini, openai, or openrouter)
+        if provider == "local":
+            emb_provider = "local"
+            emb_key = None
         else:
-            if gemini_key or os.getenv("GEMINI_API_KEY"):
-                emb_provider = "gemini"
-            elif openai_key or os.getenv("OPENAI_API_KEY"):
-                emb_provider = "openai"
+            emb_provider = "gemini"
+            if provider in ["gemini", "openai", "openrouter"]:
+                emb_provider = provider
             else:
-                emb_provider = "openrouter"
+                if gemini_key or os.getenv("GEMINI_API_KEY"):
+                    emb_provider = "gemini"
+                elif openai_key or os.getenv("OPENAI_API_KEY"):
+                    emb_provider = "openai"
+                else:
+                    emb_provider = "openrouter"
 
-        if emb_provider == "gemini":
-            emb_key = gemini_key
-        elif emb_provider == "openai":
-            emb_key = openai_key
-        else:
-            emb_key = openrouter_key
+            if emb_provider == "gemini":
+                emb_key = gemini_key
+            elif emb_provider == "openai":
+                emb_key = openai_key
+            else:
+                emb_key = openrouter_key
         proj_vector_store.add_video_chunks(video_id, chunks, provider=emb_provider, api_key=emb_key)
         
         # Complete
@@ -263,24 +271,28 @@ def run_batch_ingestion_pipeline(batch_task_id: str, urls: List[str], provider: 
             video_entry["status"] = "indexing"
             video_entry["percent"] = 95.0
             
-            # Resolve valid embedding provider (gemini, openai, or openrouter)
-            emb_provider = "gemini"
-            if provider in ["gemini", "openai", "openrouter"]:
-                emb_provider = provider
+            # Resolve valid embedding provider (local, gemini, openai, or openrouter)
+            if provider == "local":
+                emb_provider = "local"
+                emb_key = None
             else:
-                if gemini_key or os.getenv("GEMINI_API_KEY"):
-                    emb_provider = "gemini"
-                elif openai_key or os.getenv("OPENAI_API_KEY"):
-                    emb_provider = "openai"
+                emb_provider = "gemini"
+                if provider in ["gemini", "openai", "openrouter"]:
+                    emb_provider = provider
                 else:
-                    emb_provider = "openrouter"
+                    if gemini_key or os.getenv("GEMINI_API_KEY"):
+                        emb_provider = "gemini"
+                    elif openai_key or os.getenv("OPENAI_API_KEY"):
+                        emb_provider = "openai"
+                    else:
+                        emb_provider = "openrouter"
 
-            if emb_provider == "gemini":
-                emb_key = gemini_key
-            elif emb_provider == "openai":
-                emb_key = openai_key
-            else:
-                emb_key = openrouter_key
+                if emb_provider == "gemini":
+                    emb_key = gemini_key
+                elif emb_provider == "openai":
+                    emb_key = openai_key
+                else:
+                    emb_key = openrouter_key
             proj_vector_store.add_video_chunks(video_id, chunks, provider=emb_provider, api_key=emb_key)
             
             batch["completed_videos"] += 1
@@ -519,11 +531,303 @@ def api_delete_all_videos(project_id: str = "default"):
     return {"message": "All videos successfully deleted"}
 
 
+def format_chunk_raw(chunk_segments, base_url):
+    lines = []
+    for seg in chunk_segments:
+        start_time = seg.get("start", 0.0)
+        time_str = format_timestamp(start_time)
+        text = seg.get("text", "").strip()
+        if base_url:
+            if "youtube.com" in base_url or "youtu.be" in base_url:
+                link = f"{base_url}&t={int(start_time)}" if "?" in base_url else f"{base_url}?t={int(start_time)}"
+            else:
+                link = f"{base_url}#t={int(start_time)}"
+            lines.append(f"- **[{time_str}]({link})**: {text}")
+        else:
+            lines.append(f"- **[{time_str}]**: {text}")
+    return "\n".join(lines)
+
+
+def call_llm_for_polishing(
+    text: str,
+    system_prompt: str,
+    provider: str,
+    model: str,
+    gemini_key: str,
+    openai_key: str,
+    groq_key: str,
+    deepseek_key: str,
+    openrouter_key: str
+) -> str:
+    # Setup client or model
+    if provider == "gemini":
+        if not gemini_key:
+            raise ValueError("GEMINI_API_KEY is not set.")
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_key)
+        model_name = model if model else "gemini-3.5-flash"
+        model_obj = genai.GenerativeModel(
+            model_name=model_name,
+            system_instruction=system_prompt
+        )
+        response = model_obj.generate_content(text)
+        result = response.text.strip()
+        
+    elif provider == "openai":
+        if not openai_key:
+            raise ValueError("OPENAI_API_KEY is not set.")
+        from openai import OpenAI
+        client = OpenAI(api_key=openai_key)
+        model_name = model if model else "gpt-4o-mini"
+        response = client.chat.completions.create(
+            model_name=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ]
+        )
+        result = response.choices[0].message.content.strip()
+        
+    elif provider == "groq":
+        if not groq_key:
+            raise ValueError("GROQ_API_KEY is not set.")
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=groq_key
+        )
+        model_name = model if model else "llama-3.3-70b-versatile"
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ]
+        )
+        result = response.choices[0].message.content.strip()
+
+    elif provider == "deepseek":
+        if not deepseek_key:
+            raise ValueError("DEEPSEEK_API_KEY is not set.")
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://api.deepseek.com/v1",
+            api_key=deepseek_key
+        )
+        model_name = model if model else "deepseek-chat"
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ]
+        )
+        result = response.choices[0].message.content.strip()
+
+    elif provider == "openrouter":
+        if not openrouter_key:
+            raise ValueError("OPENROUTER_API_KEY is not set.")
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=openrouter_key
+        )
+        model_name = model if model else "google/gemini-2.0-flash"
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ],
+            extra_headers={
+                "HTTP-Referer": "http://localhost:8000",
+                "X-Title": "VidChatBox"
+            }
+        )
+        result = response.choices[0].message.content.strip()
+    else:
+        raise ValueError(f"Unknown provider for polishing: {provider}")
+
+    # Remove any markdown wrapping if the LLM outputted them despite instructions
+    if result.startswith("```"):
+        result = re.sub(r"^```(?:markdown)?\n", "", result)
+        result = re.sub(r"\n```$", "", result)
+        result = result.strip()
+        
+    return result
+
+
+def polish_transcript_background(
+    task_id: str,
+    project_dir: str,
+    safe_video_id: str,
+    metadata: dict,
+    segments: list,
+    provider: str,
+    model: str,
+    keys: dict
+):
+    try:
+        # 1. Group segments into 15-minute chunks
+        chunk_duration = 900.0
+        chunks = []
+        current_chunk = []
+        current_start = 0.0
+
+        for seg in segments:
+            seg_start = seg.get("start", 0.0)
+            if not current_chunk:
+                current_start = seg_start
+                current_chunk.append(seg)
+            elif seg_start - current_start < chunk_duration:
+                current_chunk.append(seg)
+            else:
+                chunks.append(current_chunk)
+                current_chunk = [seg]
+                current_start = seg_start
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        if not chunks:
+            raise ValueError("No transcript segments found to polish.")
+
+        active_provider = provider or "gemini"
+        active_model = model or ""
+
+        # Setup keys
+        gemini_key = keys.get("gemini_key") or os.getenv("GEMINI_API_KEY")
+        openai_key = keys.get("openai_key") or os.getenv("OPENAI_API_KEY")
+        groq_key = keys.get("groq_key") or os.getenv("GROQ_API_KEY")
+        deepseek_key = keys.get("deepseek_key") or os.getenv("DEEPSEEK_API_KEY")
+        openrouter_key = keys.get("openrouter_key") or os.getenv("OPENROUTER_API_KEY")
+
+        # System prompt for formatting
+        system_prompt = (
+            "You are an expert technical editor and content summarizer. "
+            "Your task is to take a raw timestamped video transcript section in Markdown and format it into a premium, readable, structured document.\n\n"
+            "CRITICAL RULES:\n"
+            "1. You MUST preserve the exact chronological order of the statements.\n"
+            "2. You MUST keep the exact markdown timestamp citation links, e.g., `[HH:MM:SS](URL_WITH_TIMESTAMP)`. Never change the URLs or the link texts.\n"
+            "3. Correct grammar, spelling, and sentence flow, removing filler words (like 'um', 'uh', stuttering) while maintaining the original meaning and tone.\n"
+            "4. Group segments into logical chapters/sections with descriptive H2 (`##`) headings.\n"
+            "5. Under each heading, provide a brief 1-2 sentence bulleted summary of what was discussed in that section, followed by the polished chronological timestamped bullet points.\n"
+            "6. Return ONLY the polished Markdown content. Do not add conversational intro/outro text or markdown block wrappers (e.g. ```markdown)."
+        )
+
+        polished_chunks = []
+        base_url = metadata.get("url") or metadata.get("webpage_url") or ""
+
+        for idx, chunk_segs in enumerate(chunks):
+            # Update progress status
+            polishing_tasks[task_id] = {
+                "status": "processing",
+                "percent": float(idx) / len(chunks) * 100,
+                "current_chunk": idx + 1,
+                "total_chunks": len(chunks),
+                "error": None
+            }
+
+            raw_chunk_text = format_chunk_raw(chunk_segs, base_url)
+            
+            # Call selected LLM
+            polished_text = call_llm_for_polishing(
+                text=raw_chunk_text,
+                system_prompt=system_prompt,
+                provider=active_provider,
+                model=active_model,
+                gemini_key=gemini_key,
+                openai_key=openai_key,
+                groq_key=groq_key,
+                deepseek_key=deepseek_key,
+                openrouter_key=openrouter_key
+            )
+            polished_chunks.append(polished_text)
+
+        # Assemble polished document
+        title = metadata.get("title", "Unknown Video")
+        duration = metadata.get("duration")
+        uploader = metadata.get("uploader", "Unknown")
+        duration_str = format_timestamp(duration) if duration else "Unknown"
+
+        header_lines = [
+            f"# {title} (Polished Summary & Transcript)",
+            "",
+            f"- **Uploader**: {uploader}",
+        ]
+        if base_url:
+            header_lines.append(f"- **Original VID**: [Watch on YouTube]({base_url})")
+        header_lines.append(f"- **Duration**: {duration_str}")
+        header_lines.append("")
+        header_lines.append("---")
+        header_lines.append("")
+        
+        full_polished_md = "\n".join(header_lines) + "\n\n" + "\n\n".join(polished_chunks)
+
+        # Save to disk
+        md_dir = os.path.join(project_dir, "markdown")
+        os.makedirs(md_dir, exist_ok=True)
+        md_filepath = os.path.join(md_dir, f"video_{safe_video_id}_polished.md")
+        with open(md_filepath, "w", encoding="utf-8") as md_f:
+            md_f.write(full_polished_md)
+
+        polishing_tasks[task_id] = {
+            "status": "completed",
+            "percent": 100.0,
+            "error": None
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        polishing_tasks[task_id] = {
+            "status": "failed",
+            "percent": 0.0,
+            "error": str(e)
+        }
+
+
+@app.get("/api/videos/{video_id}/polish-status")
+def get_polish_status(video_id: str, project_id: str = "default"):
+    project_dir = get_project_dir(project_id)
+    safe_video_id = re.sub(r'[^\w\-_]', '', video_id)
+    polished_path = os.path.join(project_dir, "markdown", f"video_{safe_video_id}_polished.md")
+    
+    if os.path.exists(polished_path):
+        return {
+            "status": "completed",
+            "percent": 100.0,
+            "error": None
+        }
+        
+    task_id = f"polish_{safe_video_id}"
+    if task_id not in polishing_tasks:
+        return {
+            "status": "not_started",
+            "percent": 0.0,
+            "error": None
+        }
+        
+    return polishing_tasks[task_id]
+
+
 @app.get("/api/videos/{video_id}/export")
-def export_video_markdown(video_id: str, project_id: str = "default", use_ai: bool = False):
+def export_video_markdown(
+    video_id: str,
+    project_id: str = "default",
+    use_ai: bool = False,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    background_tasks: BackgroundTasks = None,
+    x_groq_key: str = Header(None, alias="X-Groq-Key"),
+    x_openai_key: str = Header(None, alias="X-Openai-Key"),
+    x_gemini_key: str = Header(None, alias="X-Gemini-Key"),
+    x_deepseek_key: str = Header(None, alias="X-Deepseek-Key"),
+    x_openrouter_key: str = Header(None, alias="X-Openrouter-Key")
+):
     """Generates and serves a formatted Markdown transcription file.
     
-    If use_ai is True, uses Gemini to format, summarize, and polish the transcript.
+    If use_ai is True, uses AI to format, summarize, and polish the transcript.
     """
     project_dir = get_project_dir(project_id)
     safe_video_id = re.sub(r'[^\w\-_]', '', video_id)
@@ -554,50 +858,53 @@ def export_video_markdown(video_id: str, project_id: str = "default", use_ai: bo
     markdown_content = generate_markdown(metadata, segments)
     
     if use_ai:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=400, detail="GEMINI_API_KEY is not set. Cannot run AI Markdown polishing.")
+        polished_path = os.path.join(project_dir, "markdown", f"video_{safe_video_id}_polished.md")
+        if os.path.exists(polished_path):
+            with open(polished_path, "r", encoding="utf-8") as md_f:
+                markdown_content = md_f.read()
+        else:
+            task_id = f"polish_{safe_video_id}"
+            if task_id not in polishing_tasks or polishing_tasks[task_id]["status"] == "failed":
+                polishing_tasks[task_id] = {
+                    "status": "pending",
+                    "percent": 0.0,
+                    "error": None
+                }
+                keys = {
+                    "gemini_key": x_gemini_key,
+                    "openai_key": x_openai_key,
+                    "groq_key": x_groq_key,
+                    "deepseek_key": x_deepseek_key,
+                    "openrouter_key": x_openrouter_key
+                }
+                background_tasks.add_task(
+                    polish_transcript_background,
+                    task_id=task_id,
+                    project_dir=project_dir,
+                    safe_video_id=safe_video_id,
+                    metadata=metadata,
+                    segments=segments,
+                    provider=provider,
+                    model=model,
+                    keys=keys
+                )
             
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            
-            system_prompt = (
-                "You are an expert technical editor and content summarizer. "
-                "Your task is to take a raw timestamped video transcript in Markdown and format it into a premium, readable, structured document.\n\n"
-                "CRITICAL RULES:\n"
-                "1. You MUST preserve the exact chronological order of the statements.\n"
-                "2. You MUST keep the exact markdown timestamp citation links, e.g., `[HH:MM:SS](URL_WITH_TIMESTAMP)`. Never change the URLs or the link texts.\n"
-                "3. Correct grammar, spelling, and sentence flow, removing filler words (like 'um', 'uh', stuttering) while maintaining the original meaning and tone.\n"
-                "4. Group segments into logical chapters/sections with descriptive H2 (`##`) headings.\n"
-                "5. Under each heading, provide a brief 1-2 sentence bulleted summary of what was discussed in that section, followed by the polished chronological timestamped bullet points.\n"
-                "6. Return ONLY the polished Markdown content. Do not add conversational intro/outro text or markdown block wrappers (e.g. ```markdown)."
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": polishing_tasks[task_id]["status"],
+                    "percent": polishing_tasks[task_id]["percent"],
+                    "task_id": task_id,
+                    "message": "Polishing task started in background."
+                }
             )
-            
-            model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=system_prompt
-            )
-            
-            response = model.generate_content(markdown_content)
-            polished_markdown = response.text.strip()
-            
-            if polished_markdown.startswith("```"):
-                polished_markdown = re.sub(r"^```(?:markdown)?\n", "", polished_markdown)
-                polished_markdown = re.sub(r"\n```$", "", polished_markdown)
-                polished_markdown = polished_markdown.strip()
-                
-            markdown_content = polished_markdown
-        except Exception as ai_err:
-            print(f"Warning: AI polishing failed, falling back to raw markdown. Error: {ai_err}")
-            
-    # Save a copy in the project's markdown directory
-    md_dir = os.path.join(project_dir, "markdown")
-    os.makedirs(md_dir, exist_ok=True)
-    suffix = "_polished.md" if use_ai else ".md"
-    md_filepath = os.path.join(md_dir, f"video_{safe_video_id}{suffix}")
-    with open(md_filepath, "w", encoding="utf-8") as md_f:
-        md_f.write(markdown_content)
+    else:
+        # Save a copy of the raw markdown in the project's markdown directory
+        md_dir = os.path.join(project_dir, "markdown")
+        os.makedirs(md_dir, exist_ok=True)
+        md_filepath = os.path.join(md_dir, f"video_{safe_video_id}.md")
+        with open(md_filepath, "w", encoding="utf-8") as md_f:
+            md_f.write(markdown_content)
         
     # Serve as file attachment
     raw_title = metadata.get("title", video_id)
@@ -714,47 +1021,54 @@ def run_chat(
     if req.provider in ["gemini", "openai", "openrouter"]:
         embedding_provider = req.provider
     else:
-        if g_key_valid:
+        if or_key_valid:
+            embedding_provider = "openrouter"
+        elif g_key_valid:
             embedding_provider = "gemini"
         elif o_key_valid:
             embedding_provider = "openai"
-        elif or_key_valid:
-            embedding_provider = "openrouter"
         else:
             g_env = os.getenv("GEMINI_API_KEY")
             o_env = os.getenv("OPENAI_API_KEY")
             or_env = os.getenv("OPENROUTER_API_KEY")
-            if g_env and g_env.strip():
-                embedding_provider = "gemini"
-            elif o_env and o_env.strip():
-                embedding_provider = "openai"
-            else:
+            if or_env and or_env.strip():
                 embedding_provider = "openrouter"
+            elif g_env and g_env.strip():
+                embedding_provider = "gemini"
+            else:
+                embedding_provider = "openai"
 
     # Auto-align embedding provider with stored embeddings in the database to prevent alignment errors
     if proj_vector_store.data.get("chunks"):
-        stored_dim = len(proj_vector_store.data["chunks"][0]["embedding"])
-        if stored_dim == 3072 and embedding_provider != "gemini":
-            embedding_provider = "gemini"
-        elif stored_dim == 1536 and embedding_provider == "gemini":
-            if o_key_valid:
-                embedding_provider = "openai"
-            elif or_key_valid:
-                embedding_provider = "openrouter"
-            else:
-                o_env = os.getenv("OPENAI_API_KEY")
-                or_env = os.getenv("OPENROUTER_API_KEY")
-                if o_env and o_env.strip():
+        first_chunk = proj_vector_store.data["chunks"][0]
+        first_emb = first_chunk.get("embedding")
+        if first_emb is None:
+            embedding_provider = "local"
+        else:
+            stored_dim = len(first_emb)
+            if stored_dim == 3072 and embedding_provider != "gemini":
+                embedding_provider = "gemini"
+            elif stored_dim == 1536 and embedding_provider == "gemini":
+                if o_key_valid:
                     embedding_provider = "openai"
-                elif or_env and or_env.strip():
+                elif or_key_valid:
                     embedding_provider = "openrouter"
                 else:
-                    embedding_provider = "openai"
+                    o_env = os.getenv("OPENAI_API_KEY")
+                    or_env = os.getenv("OPENROUTER_API_KEY")
+                    if o_env and o_env.strip():
+                        embedding_provider = "openai"
+                    elif or_env and or_env.strip():
+                        embedding_provider = "openrouter"
+                    else:
+                        embedding_provider = "openai"
 
     if embedding_provider == "gemini":
         emb_key = gemini_key
     elif embedding_provider == "openai":
         emb_key = openai_key
+    elif embedding_provider == "local":
+        emb_key = None
     else:
         emb_key = openrouter_key
 

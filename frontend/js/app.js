@@ -169,9 +169,16 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
         
-        // If current selection is disabled, fallback to groq
-        const selectedOpt = providerSelect.options[providerSelect.selectedIndex];
-        if (selectedOpt && selectedOpt.disabled) {
+        // Prioritize auto-selecting active provider based on configured keys (openrouter > gemini > openai > deepseek > groq)
+        if (hasOpenRouter) {
+            providerSelect.value = "openrouter";
+        } else if (hasGemini) {
+            providerSelect.value = "gemini";
+        } else if (hasOpenAI) {
+            providerSelect.value = "openai";
+        } else if (hasDeepSeek) {
+            providerSelect.value = "deepseek";
+        } else {
             providerSelect.value = "groq";
         }
     }
@@ -325,10 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btnWidgetClose.classList.add("hidden");
 
         try {
-            let provider = providerSelect.value;
-            if (provider !== "openai" && provider !== "gemini" && provider !== "openrouter") {
-                provider = localStorage.getItem("user_openrouter_key") ? "openrouter" : (localStorage.getItem("user_openai_key") ? "openai" : "gemini");
-            }
+            const provider = document.getElementById("ingest-provider-select").value;
             const openAiKey = localStorage.getItem("user_openai_key");
             const geminiKey = localStorage.getItem("user_gemini_key");
             const openRouterKey = localStorage.getItem("user_openrouter_key");
@@ -1102,37 +1106,92 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.innerHTML = useAI ? "Polishing... ✨" : "Exporting... ⏳";
         
         try {
-            const url = `${API_BASE}/api/videos/${encodeURIComponent(videoId)}/export?project_id=${encodeURIComponent(currentProjectId)}&use_ai=${useAI}`;
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(await getErrorMessage(response, "Export failed"));
-            }
+            // Include active provider and model in query parameters for AI polishing
+            const provider = providerSelect.value;
+            const model = modelSelect.value;
             
-            const blob = await response.blob();
+            // Get keys from local storage
+            const openAiKey = localStorage.getItem("user_openai_key");
+            const geminiKey = localStorage.getItem("user_gemini_key");
+            const groqKey = localStorage.getItem("user_groq_key");
+            const deepseekKey = localStorage.getItem("user_deepseek_key");
+            const openRouterKey = localStorage.getItem("user_openrouter_key");
+
+            const url = `${API_BASE}/api/videos/${encodeURIComponent(videoId)}/export?project_id=${encodeURIComponent(currentProjectId)}&use_ai=${useAI}&provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`;
             
-            // Extract filename from response header
-            const disposition = response.headers.get("content-disposition");
-            let filename = useAI ? "polished_summary.md" : "transcript.md";
-            if (disposition && disposition.indexOf("attachment") !== -1) {
-                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                const matches = filenameRegex.exec(disposition);
-                if (matches != null && matches[1]) {
-                    filename = matches[1].replace(/['"]/g, '');
+            // Add custom API headers if we have them
+            const headers = {};
+            if (openAiKey) headers["X-Openai-Key"] = openAiKey;
+            if (geminiKey) headers["X-Gemini-Key"] = geminiKey;
+            if (groqKey) headers["X-Groq-Key"] = groqKey;
+            if (deepseekKey) headers["X-Deepseek-Key"] = deepseekKey;
+            if (openRouterKey) headers["X-Openrouter-Key"] = openRouterKey;
+
+            const makeExportRequest = async () => {
+                const response = await fetch(url, { headers });
+                if (!response.ok) {
+                    throw new Error(await getErrorMessage(response, "Export failed"));
                 }
-            }
+                
+                // If the backend returned 202, it means the polishing task is running in the background
+                if (response.status === 202) {
+                    const statusData = await response.json();
+                    
+                    // Poll the status API
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const statusResponse = await fetch(`${API_BASE}/api/videos/${encodeURIComponent(videoId)}/polish-status?project_id=${encodeURIComponent(currentProjectId)}`);
+                            if (!statusResponse.ok) return;
+                            const status = await statusResponse.json();
+                            if (status.status === "completed") {
+                                clearInterval(pollInterval);
+                                // Polishing complete, make export request again to download the cached file
+                                makeExportRequest();
+                            } else if (status.status === "failed") {
+                                clearInterval(pollInterval);
+                                alert("AI Polishing failed: " + status.error);
+                                btn.disabled = false;
+                                btn.innerHTML = originalText;
+                            } else {
+                                btn.innerHTML = `Polishing... ${Math.round(status.percent)}% ✨`;
+                            }
+                        } catch (pollErr) {
+                            console.error("Polling error:", pollErr);
+                        }
+                    }, 3000);
+                    return;
+                }
+                
+                const blob = await response.blob();
+                
+                // Extract filename from response header
+                const disposition = response.headers.get("content-disposition");
+                let filename = useAI ? "polished_summary.md" : "transcript.md";
+                if (disposition && disposition.indexOf("attachment") !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+                
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            };
             
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = downloadUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(downloadUrl);
+            await makeExportRequest();
             
         } catch (err) {
             alert("Export error: " + err.message);
-        } finally {
             btn.disabled = false;
             btn.innerHTML = originalText;
         }

@@ -123,8 +123,8 @@
                     <div class="setting-group">
                         <label for="provider-select">AI Engine</label>
                         <select id="provider-select" class="custom-select">
-                            <option value="groq" selected>Groq LPU</option>
-                            <option value="openrouter" id="opt-openrouter" disabled>OpenRouter (Key required 🔒)</option>
+                            <option value="openrouter" id="opt-openrouter" disabled selected>OpenRouter (Key required 🔒)</option>
+                            <option value="groq">Groq LPU</option>
                             <option value="gemini" id="opt-gemini" disabled>Gemini (Key required 🔒)</option>
                             <option value="openai" id="opt-openai" disabled>OpenAI (Key required 🔒)</option>
                             <option value="deepseek" id="opt-deepseek" disabled>DeepSeek (Key required 🔒)</option>
@@ -228,6 +228,16 @@
                         <textarea id="vod-urls" placeholder="Paste YouTube URL(s) - one URL per line for batch processing" required></textarea>
                     </div>
                     <span class="form-tip">We will extract the official transcripts or auto-captions and save them to the project database.</span>
+                </div>
+                <div class="form-group">
+                    <label for="ingest-provider-select">Search/Embedding Method</label>
+                    <select id="ingest-provider-select" class="custom-select" style="width: 100%; border-radius: 0.5rem; height: 38px; margin-top: 0.25rem; padding: 0 0.75rem;">
+                        <option value="local" selected>Local TF-IDF (Free, offline, fast, no quota limits) 🚀</option>
+                        <option value="gemini">Gemini Embeddings (Requires Gemini Key)</option>
+                        <option value="openai">OpenAI Embeddings (Requires OpenAI Key)</option>
+                        <option value="openrouter">OpenRouter Embeddings (Requires OpenRouter Key)</option>
+                    </select>
+                    <span class="form-tip">Choose how transcripts are indexed. Local TF-IDF runs offline, uses 0 tokens, and is completely free.</span>
                 </div>
                 <div class="modal-actions">
                     <button type="button" id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
