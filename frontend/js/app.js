@@ -244,10 +244,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (ingestProviderSelect && ingestMethodNote) {
         ingestProviderSelect.addEventListener("change", () => {
             const val = ingestProviderSelect.value;
-            if (val === "local-ai") {
-                ingestMethodNote.innerHTML = `💻 <strong>Local AI (Sentence-Transformers):</strong> Sử dụng mô hình AI <code>intfloat/multilingual-e5-small</code> (~180MB) chạy hoàn toàn offline trên CPU. Tự động tải mô hình ở lần chạy đầu tiên. <strong>Tìm kiếm ngữ nghĩa (Semantic Search), hiểu từ đồng nghĩa, miễn phí và không tốn quota API!</strong>`;
+            if (val === "local") {
+                ingestMethodNote.innerHTML = `⚡ <strong>Local Keyword (TF-IDF):</strong> Tìm kiếm từ khóa cục bộ siêu tốc, hoàn toàn miễn phí và <strong>không tốn RAM máy chủ</strong>. Thích hợp cho môi trường dung lượng RAM thấp như Railway Starter (512MB).`;
                 ingestMethodNote.style.borderLeftColor = "var(--text-success)";
                 ingestMethodNote.style.background = "rgba(16, 185, 129, 0.06)";
+            } else if (val === "local-ai") {
+                ingestMethodNote.innerHTML = `💻 <strong>Local Semantic AI (Sentence-Transformers):</strong> Sử dụng mô hình AI <code>intfloat/multilingual-e5-small</code> (~180MB) chạy offline trên CPU. Tự động tải mô hình ở lần chạy đầu tiên. <strong>Yêu cầu RAM máy chủ >= 1.5GB (Không dùng trên gói Railway miễn phí 512MB vì sẽ bị OOM/Crashed).</strong>`;
+                ingestMethodNote.style.borderLeftColor = "var(--text-warning)";
+                ingestMethodNote.style.background = "rgba(245, 158, 11, 0.06)";
             } else {
                 const providerName = val.charAt(0).toUpperCase() + val.slice(1);
                 ingestMethodNote.innerHTML = `🔮 <strong>AI Embedding (${providerName}):</strong> Phân tích ngữ nghĩa chiều sâu (semantic search) qua API của ${providerName}. Giúp tìm kiếm theo ý nghĩa và ngữ cảnh kể cả khi dùng từ đồng nghĩa, nhưng <strong>sẽ tiêu tốn quota API</strong> và yêu cầu điền API Key trong phần cài đặt.`;
