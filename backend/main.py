@@ -3,6 +3,8 @@ import uuid
 import hashlib
 import re
 import json
+import unicodedata
+from urllib.parse import quote
 from typing import List, Optional
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Response, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -908,19 +910,29 @@ def export_video_markdown(
         
     # Serve as file attachment
     raw_title = metadata.get("title", video_id)
-    # Clean non-ASCII to prevent latin-1 HTTP header encoding error
-    ascii_title = re.sub(r'[^\x00-\x7F]', '_', raw_title)
-    safe_title = re.sub(r'[^\w\-_]', '_', ascii_title)
-    safe_title = re.sub(r'_+', '_', safe_title).strip('_')
-    if not safe_title:
-        safe_title = "video_" + re.sub(r'[^\w\-_]', '_', video_id)
-    filename = f"{safe_title}_polished.md" if use_ai else f"{safe_title}.md"
+    suffix = "_polished" if use_ai else ""
+    
+    # UTF-8 filename for modern browsers (preserves Vietnamese diacritics)
+    utf8_title = re.sub(r'[\\/:*?"<>|]', '_', raw_title)
+    utf8_title = re.sub(r'_+', '_', utf8_title).strip('_')
+    if not utf8_title:
+        utf8_title = "video_" + re.sub(r'[^\w\-_]', '_', video_id)
+    utf8_filename = f"{utf8_title}{suffix}.md"
+    
+    # ASCII fallback: transliterate diacritics (e.g. "GIẢI" → "GIAI") instead of replacing with "_"
+    nfkd = unicodedata.normalize('NFKD', utf8_title)
+    ascii_title = nfkd.encode('ascii', 'ignore').decode('ascii')
+    ascii_title = re.sub(r'[^\w\-_]', '_', ascii_title)
+    ascii_title = re.sub(r'_+', '_', ascii_title).strip('_')
+    if not ascii_title:
+        ascii_title = "video_" + re.sub(r'[^\w\-_]', '_', video_id)
+    ascii_filename = f"{ascii_title}{suffix}.md"
     
     return Response(
         content=markdown_content,
         media_type="text/markdown",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
+            "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{quote(utf8_filename)}"
         }
     )
 
@@ -964,34 +976,42 @@ def export_project_batch(project_id: str):
                 
                 markdown_content = generate_markdown(metadata, segments)
                 
-                # Make a safe filename
+                # Make a safe filename (preserve Vietnamese diacritics)
                 video_id = package.get("video_id", f_name.replace("video_", "").replace(".json", ""))
                 raw_title = metadata.get("title", video_id)
-                # Clean non-ASCII to prevent ZipFile file-system decoding issues
-                ascii_title = re.sub(r'[^\x00-\x7F]', '_', raw_title)
-                safe_title = re.sub(r'[^\w\-_]', '_', ascii_title)
+                safe_title = re.sub(r'[\\/:*?"<>|]', '_', raw_title)
                 safe_title = re.sub(r'_+', '_', safe_title).strip('_')
                 if not safe_title:
                     safe_title = "video_" + re.sub(r'[^\w\-_]', '_', video_id)
                 filename = f"{safe_title}.md"
                 
-                zip_file.writestr(filename, markdown_content)
+                zip_file.writestr(filename, markdown_content.encode('utf-8'))
             except Exception as e:
                 print(f"Error adding {f_name} to batch ZIP: {e}")
                 
     zip_buffer.seek(0)
     
-    ascii_project_id = re.sub(r'[^\x00-\x7F]', '_', project_id)
-    safe_project_id = re.sub(r'[^\w\-_]', '_', ascii_project_id)
-    safe_project_id = re.sub(r'_+', '_', safe_project_id).strip('_')
-    if not safe_project_id:
-        safe_project_id = "default"
+    # UTF-8 filename for ZIP
+    utf8_project_id = re.sub(r'[\\/:*?"<>|]', '_', project_id)
+    utf8_project_id = re.sub(r'_+', '_', utf8_project_id).strip('_')
+    if not utf8_project_id:
+        utf8_project_id = "default"
+    utf8_zip_name = f"transcripts_{utf8_project_id}.zip"
+    
+    # ASCII fallback
+    nfkd = unicodedata.normalize('NFKD', utf8_project_id)
+    ascii_project_id = nfkd.encode('ascii', 'ignore').decode('ascii')
+    ascii_project_id = re.sub(r'[^\w\-_]', '_', ascii_project_id)
+    ascii_project_id = re.sub(r'_+', '_', ascii_project_id).strip('_')
+    if not ascii_project_id:
+        ascii_project_id = "default"
+    ascii_zip_name = f"transcripts_{ascii_project_id}.zip"
         
     return StreamingResponse(
         zip_buffer,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="transcripts_{safe_project_id}.zip"'
+            "Content-Disposition": f"attachment; filename=\"{ascii_zip_name}\"; filename*=UTF-8''{quote(utf8_zip_name)}"
         }
     )
 
