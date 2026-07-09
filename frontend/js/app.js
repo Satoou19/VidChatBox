@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const userOpenAIKey = document.getElementById("user-openai-key");
     const userGeminiKey = document.getElementById("user-gemini-key");
     const userDeepSeekKey = document.getElementById("user-deepseek-key");
+    const userLlm7Key = document.getElementById("user-llm7-key");
 
     // Knowledge Base Elements
     const videoList = document.getElementById("video-list");
@@ -118,6 +119,12 @@ document.addEventListener("DOMContentLoaded", () => {
         ],
         deepseek: [
             { value: "deepseek-chat", text: "DeepSeek V3" }
+        ],
+        llm7: [
+            { value: "default", text: "LLM7 Default (Balanced)" },
+            { value: "gpt-5.5", text: "GPT 5.5 (Pro & Smart)" },
+            { value: "gpt-5.4-mini", text: "GPT 5.4 Mini (Fast & Cost-Effective)" },
+            { value: "deepseek-v4-flash", text: "DeepSeek V4 Flash" }
         ]
     };
 
@@ -126,11 +133,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const hasGemini = !!localStorage.getItem("user_gemini_key");
         const hasDeepSeek = !!localStorage.getItem("user_deepseek_key");
         const hasOpenRouter = !!localStorage.getItem("user_openrouter_key");
+        const hasLlm7 = !!localStorage.getItem("user_llm7_key");
 
         const optOpenAI = document.getElementById("opt-openai");
         const optGemini = document.getElementById("opt-gemini");
         const optDeepSeek = document.getElementById("opt-deepseek");
         const optOpenRouter = document.getElementById("opt-openrouter");
+        const optLlm7 = document.getElementById("opt-llm7");
 
         if (optOpenAI) {
             if (hasOpenAI) {
@@ -168,8 +177,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 optOpenRouter.textContent = "OpenRouter (Key required 🔒)";
             }
         }
+        if (optLlm7) {
+            if (hasLlm7) {
+                optLlm7.disabled = false;
+                optLlm7.textContent = "LLM7";
+            } else {
+                optLlm7.disabled = true;
+                optLlm7.textContent = "LLM7 (Key required 🔒)";
+            }
+        }
 
-        // Prioritize auto-selecting active provider based on configured keys (openrouter > gemini > openai > deepseek > groq)
+        // Prioritize auto-selecting active provider based on configured keys (openrouter > gemini > openai > deepseek > llm7 > groq)
         if (hasOpenRouter) {
             providerSelect.value = "openrouter";
         } else if (hasGemini) {
@@ -178,6 +196,8 @@ document.addEventListener("DOMContentLoaded", () => {
             providerSelect.value = "openai";
         } else if (hasDeepSeek) {
             providerSelect.value = "deepseek";
+        } else if (hasLlm7) {
+            providerSelect.value = "llm7";
         } else {
             providerSelect.value = "groq";
         }
@@ -245,7 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ingestProviderSelect.addEventListener("change", () => {
             const val = ingestProviderSelect.value;
             if (val === "local") {
-                ingestMethodNote.innerHTML = `⚡ <strong>Local Keyword (TF-IDF):</strong> Tìm kiếm từ khóa cục bộ siêu tốc, hoàn toàn miễn phí và <strong>không tốn RAM máy chủ</strong>. Thích hợp cho môi trường dung lượng RAM thấp như Railway Starter (512MB).`;
+                ingestMethodNote.innerHTML = `⚡ <strong>Local Keyword (BM25):</strong> Tìm kiếm từ khóa cục bộ siêu tốc, hoàn toàn miễn phí và <strong>không tốn RAM máy chủ</strong>. Thích hợp cho môi trường dung lượng RAM thấp như Railway Starter (512MB).`;
                 ingestMethodNote.style.borderLeftColor = "var(--text-success)";
                 ingestMethodNote.style.background = "rgba(16, 185, 129, 0.06)";
             } else if (val === "local-ai") {
@@ -272,9 +292,10 @@ document.addEventListener("DOMContentLoaded", () => {
         userOpenAIKey.value = localStorage.getItem("user_openai_key") || "";
         userGeminiKey.value = localStorage.getItem("user_gemini_key") || "";
         userDeepSeekKey.value = localStorage.getItem("user_deepseek_key") || "";
+        userLlm7Key.value = localStorage.getItem("user_llm7_key") || "";
 
         settingsModal.classList.remove("hidden");
-        userOpenRouterKey.focus();
+        userLlm7Key.focus();
     };
 
     const closeSettingsModal = () => {
@@ -300,6 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("user_openai_key", userOpenAIKey.value.trim());
         localStorage.setItem("user_gemini_key", userGeminiKey.value.trim());
         localStorage.setItem("user_deepseek_key", userDeepSeekKey.value.trim());
+        localStorage.setItem("user_llm7_key", userLlm7Key.value.trim());
 
         updateProviderDropdown();
         closeSettingsModal();
@@ -452,7 +474,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let activeIndex = -1;
         if (status === "extracting_metadata") activeIndex = 0;
-        else if (status === "downloading_subtitles" || status === "downloading") activeIndex = 1;
+        else if (status === "downloading_subtitles" || status === "downloading" || (status && (status.startsWith("rotating_proxy_") || status.startsWith("fetching_")))) activeIndex = 1;
         else if (status === "processing_package" || status === "processing") activeIndex = 2;
         else if (status === "indexing") activeIndex = 3;
 
@@ -610,6 +632,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Helper: format task status string for user view
     function formatStatusName(status) {
+        if (status && status.startsWith("rotating_proxy_")) {
+            const num = status.split("_").pop();
+            return `Rotating Proxy (${num})...`;
+        }
+        if (status === "fetching_transcript_api_direct" || status === "fetching_direct") {
+            return "Downloading Direct...";
+        }
         switch (status) {
             case "extracting_metadata": return "Info Extraction...";
             case "downloading_subtitles": return "Subtitles Download...";
@@ -662,12 +691,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const openAiKey = localStorage.getItem("user_openai_key");
             const geminiKey = localStorage.getItem("user_gemini_key");
             const deepseekKey = localStorage.getItem("user_deepseek_key");
+            const llm7Key = localStorage.getItem("user_llm7_key");
 
             if (openRouterKey) headers["X-Openrouter-Key"] = openRouterKey;
             if (groqKey) headers["X-Groq-Key"] = groqKey;
             if (openAiKey) headers["X-Openai-Key"] = openAiKey;
             if (geminiKey) headers["X-Gemini-Key"] = geminiKey;
             if (deepseekKey) headers["X-Deepseek-Key"] = deepseekKey;
+            if (llm7Key) headers["X-Llm7-Key"] = llm7Key;
 
             const response = await fetch(`${API_BASE}/api/chat`, {
                 method: "POST",
@@ -1144,6 +1175,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const groqKey = localStorage.getItem("user_groq_key");
             const deepseekKey = localStorage.getItem("user_deepseek_key");
             const openRouterKey = localStorage.getItem("user_openrouter_key");
+            const llm7Key = localStorage.getItem("user_llm7_key");
 
             const url = `${API_BASE}/api/videos/${encodeURIComponent(videoId)}/export?project_id=${encodeURIComponent(currentProjectId)}&use_ai=${useAI}&provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`;
 
@@ -1154,6 +1186,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (groqKey) headers["X-Groq-Key"] = groqKey;
             if (deepseekKey) headers["X-Deepseek-Key"] = deepseekKey;
             if (openRouterKey) headers["X-Openrouter-Key"] = openRouterKey;
+            if (llm7Key) headers["X-Llm7-Key"] = llm7Key;
 
             const makeExportRequest = async () => {
                 const response = await fetch(url, { headers });

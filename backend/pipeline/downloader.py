@@ -1,5 +1,6 @@
 import os
 import re
+import html
 import yt_dlp
 
 class VideoDownloader:
@@ -122,7 +123,9 @@ class VideoDownloader:
         last_err = None
         pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
         
-        for proxy in proxies:
+        for idx, proxy in enumerate(proxies, start=1):
+            if progress_callback:
+                progress_callback(f"rotating_proxy_{idx}", 50)
             session.proxies = {
                 "http": proxy,
                 "https": proxy
@@ -145,6 +148,8 @@ class VideoDownloader:
                 
         if not data:
             session.proxies = {}
+            if progress_callback:
+                progress_callback("fetching_transcript_api_direct", 55)
             try:
                 api = YouTubeTranscriptApi(http_client=session)
                 transcript_list = api.list(video_id)
@@ -174,10 +179,10 @@ class VideoDownloader:
             try:
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
                 response = session.get(url, headers=headers, timeout=10)
-                html = response.text
-                title_match = re.search(r'<title>(.*?)</title>', html)
+                html_text = response.text
+                title_match = re.search(r'<title>(.*?)</title>', html_text)
                 if title_match:
-                    title = title_match.group(1).replace(" - YouTube", "").strip()
+                    title = html.unescape(title_match.group(1).replace(" - YouTube", "").strip())
             except Exception as e:
                 print(f"Scraping title failed: {e}")
                 
@@ -302,7 +307,9 @@ class VideoDownloader:
             proxies = self._get_youtube_proxies()
             random.shuffle(proxies)
             
-            for proxy in proxies:
+            for idx, proxy in enumerate(proxies, start=1):
+                if progress_callback:
+                    progress_callback(f"rotating_proxy_{idx}", 30)
                 session.proxies = {
                     "http": proxy,
                     "https": proxy
@@ -321,6 +328,8 @@ class VideoDownloader:
             # Fallback: direct download without proxy
             if not download_success:
                 session.proxies = {}
+                if progress_callback:
+                    progress_callback("fetching_direct", 35)
                 try:
                     response = session.get(vtt_url, headers=headers, timeout=15)
                     response.raise_for_status()
@@ -493,9 +502,12 @@ class VideoDownloader:
             except Exception as direct_err:
                 raise Exception(f"Failed to extract video info (all proxies & direct failed). Last proxy error: {last_err or 'None'}. Direct error: {direct_err}")
                 
+        title = info.get("title")
+        if title:
+            title = html.unescape(title)
         return {
             "id": info.get("id"),
-            "title": info.get("title"),
+            "title": title,
             "duration": info.get("duration"),
             "uploader": info.get("uploader"),
             "webpage_url": info.get("webpage_url"),

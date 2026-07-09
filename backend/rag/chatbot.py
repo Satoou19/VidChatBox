@@ -4,12 +4,13 @@ from openai import OpenAI
 import google.generativeai as genai
 
 class RAGChatbot:
-    def __init__(self, gemini_api_key=None, openai_api_key=None, groq_api_key=None, deepseek_api_key=None, openrouter_api_key=None):
+    def __init__(self, gemini_api_key=None, openai_api_key=None, groq_api_key=None, deepseek_api_key=None, openrouter_api_key=None, llm7_api_key=None):
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.groq_api_key = groq_api_key or os.getenv("GROQ_API_KEY")
         self.deepseek_api_key = deepseek_api_key or os.getenv("DEEPSEEK_API_KEY")
         self.openrouter_api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
+        self.llm7_api_key = llm7_api_key or os.getenv("LLM7_API_KEY")
         
         if self.gemini_api_key:
             genai.configure(api_key=self.gemini_api_key)
@@ -31,12 +32,19 @@ class RAGChatbot:
                 base_url="https://api.deepseek.com/v1",
                 api_key=self.deepseek_api_key
             )
-
+ 
         self.openrouter_client = None
         if self.openrouter_api_key:
             self.openrouter_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=self.openrouter_api_key
+            )
+
+        self.llm7_client = None
+        if self.llm7_api_key:
+            self.llm7_client = OpenAI(
+                base_url="https://api.llm7.io/v1",
+                api_key=self.llm7_api_key
             )
 
     def format_timestamp(self, seconds):
@@ -216,6 +224,27 @@ class RAGChatbot:
                     "HTTP-Referer": "http://localhost:8000",
                     "X-Title": "VidChatBox"
                 }
+            )
+            
+            for chunk in response:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    yield delta.content
+
+        elif provider == "llm7":
+            if not self.llm7_client:
+                raise ValueError("LLM7_API_KEY is not set.")
+                
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"User Question: {query}\n\n{context_str}"}
+            ]
+            
+            model_name = model if model else "default"
+            response = self.llm7_client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                stream=True
             )
             
             for chunk in response:

@@ -128,6 +128,7 @@
                             <option value="gemini" id="opt-gemini" disabled>Gemini (Key required 🔒)</option>
                             <option value="openai" id="opt-openai" disabled>OpenAI (Key required 🔒)</option>
                             <option value="deepseek" id="opt-deepseek" disabled>DeepSeek (Key required 🔒)</option>
+                            <option value="llm7" id="opt-llm7" disabled>LLM7 (Key required 🔒)</option>
                         </select>
                     </div>
                     <div class="setting-group">
@@ -232,14 +233,14 @@
                 <div class="form-group">
                     <label for="ingest-provider-select">Search/Embedding Method</label>
                     <select id="ingest-provider-select" class="custom-select" style="width: 100%; border-radius: 0.5rem; height: 38px; margin-top: 0.25rem; padding: 0 0.75rem;">
-                        <option value="local" selected>Local Keyword (TF-IDF - Fast & Zero RAM) ⚡</option>
+                        <option value="local" selected>Local Keyword (BM25 - Fast & Zero RAM) ⚡</option>
                         <option value="local-ai">Local Semantic AI (Sentence-Transformers E5 - Heavy RAM) 💻</option>
                         <option value="gemini">Gemini Embeddings (Requires Gemini Key)</option>
                         <option value="openai">OpenAI Embeddings (Requires OpenAI Key)</option>
                         <option value="openrouter">OpenRouter Embeddings (Requires OpenRouter Key)</option>
                     </select>
                     <div id="ingest-method-note" style="margin-top: 0.5rem; padding: 0.75rem; background: rgba(16, 185, 129, 0.06); border-left: 3px solid var(--text-success); border-radius: 0.35rem; font-size: 0.75rem; line-height: 1.4; color: var(--text-secondary); transition: var(--transition-smooth);">
-                        ⚡ <strong>Local Keyword (TF-IDF):</strong> Tìm kiếm từ khóa cục bộ siêu tốc, hoàn toàn miễn phí và <strong>không tốn RAM máy chủ</strong>. Thích hợp cho môi trường dung lượng RAM thấp như Railway Starter (512MB).
+                        ⚡ <strong>Local Keyword (BM25):</strong> Tìm kiếm từ khóa cục bộ siêu tốc, hoàn toàn miễn phí và <strong>không tốn RAM máy chủ</strong>. Thích hợp cho môi trường dung lượng RAM thấp như Railway Starter (512MB).
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -297,6 +298,13 @@
                     <label for="user-deepseek-key">DeepSeek API Key (Direct)</label>
                     <div class="input-wrapper">
                         <input type="password" id="user-deepseek-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="sk-...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="user-llm7-key">LLM7 API Key</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="user-llm7-key" class="custom-select" style="background-image: none; width: 100%; height: 38px; border-radius: 0.5rem;" placeholder="kj77zXw49W...">
                     </div>
                 </div>
 
