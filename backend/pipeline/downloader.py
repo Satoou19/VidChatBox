@@ -464,7 +464,7 @@ class VideoDownloader:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'ignore_no_formats_error': True,
+            'ignore_no_formats_error': False,
             'skip_download': True,
             'youtube_include_dash_manifest': False,
             'youtube_include_hls_manifest': False,
