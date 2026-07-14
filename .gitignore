@@ -21,3 +21,7 @@ backend/data/
 .DS_Store
 Thumbs.db
 working_proxies.md
+
+# Build and distribution
+dist/
+build/

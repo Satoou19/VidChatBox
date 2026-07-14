@@ -1,6 +1,40 @@
 // VidChatBox Frontend Application Logic
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Global settings cache with local storage initial state as fallback
+    let cachedSettings = {
+        user_openrouter_key: localStorage.getItem("user_openrouter_key") || "",
+        user_groq_key: localStorage.getItem("user_groq_key") || "",
+        user_openai_key: localStorage.getItem("user_openai_key") || "",
+        user_gemini_key: localStorage.getItem("user_gemini_key") || "",
+        user_deepseek_key: localStorage.getItem("user_deepseek_key") || "",
+        user_llm7_key: localStorage.getItem("user_llm7_key") || ""
+    };
+
+    async function syncSettingsFromDesktop() {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.load_settings) {
+            try {
+                const res = await window.pywebview.api.load_settings();
+                if (res && res.success && res.settings) {
+                    // Update cache
+                    Object.keys(res.settings).forEach(key => {
+                        cachedSettings[key] = res.settings[key] || "";
+                    });
+                    // Refresh elements loaded with settings
+                    updateProviderDropdown();
+                    updateModelSelect();
+                }
+            } catch (e) {
+                console.error("Failed to load settings from desktop:", e);
+            }
+        }
+    }
+
+    // Call sync on startup (in case pywebview is already ready)
+    syncSettingsFromDesktop();
+
+    // Listen for pywebview ready event
+    window.addEventListener("pywebviewready", syncSettingsFromDesktop);
     // DOM Elements - Selectors & Config
     const providerSelect = document.getElementById("provider-select");
     const modelSelect = document.getElementById("model-select");
@@ -35,6 +69,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const userGeminiKey = document.getElementById("user-gemini-key");
     const userDeepSeekKey = document.getElementById("user-deepseek-key");
     const userLlm7Key = document.getElementById("user-llm7-key");
+
+    // Guide Modal Elements
+    const guideModal = document.getElementById("guide-modal");
+    const btnCloseGuide = document.getElementById("btn-close-guide");
+    const btnStartExploring = document.getElementById("btn-start-exploring");
+    const chkDontShowGuide = document.getElementById("chk-dont-show-guide");
+    const btnFloatingHelp = document.getElementById("btn-floating-help");
 
     // Knowledge Base Elements
     const videoList = document.getElementById("video-list");
@@ -129,11 +170,11 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     function updateProviderDropdown() {
-        const hasOpenAI = !!localStorage.getItem("user_openai_key");
-        const hasGemini = !!localStorage.getItem("user_gemini_key");
-        const hasDeepSeek = !!localStorage.getItem("user_deepseek_key");
-        const hasOpenRouter = !!localStorage.getItem("user_openrouter_key");
-        const hasLlm7 = !!localStorage.getItem("user_llm7_key");
+        const hasOpenAI = !!cachedSettings.user_openai_key;
+        const hasGemini = !!cachedSettings.user_gemini_key;
+        const hasDeepSeek = !!cachedSettings.user_deepseek_key;
+        const hasOpenRouter = !!cachedSettings.user_openrouter_key;
+        const hasLlm7 = !!cachedSettings.user_llm7_key;
 
         const optOpenAI = document.getElementById("opt-openai");
         const optGemini = document.getElementById("opt-gemini");
@@ -286,13 +327,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // -------------------------------------------------------------
 
     const openSettingsModal = () => {
-        // Load saved API keys from localStorage
-        userOpenRouterKey.value = localStorage.getItem("user_openrouter_key") || "";
-        userGroqKey.value = localStorage.getItem("user_groq_key") || "";
-        userOpenAIKey.value = localStorage.getItem("user_openai_key") || "";
-        userGeminiKey.value = localStorage.getItem("user_gemini_key") || "";
-        userDeepSeekKey.value = localStorage.getItem("user_deepseek_key") || "";
-        userLlm7Key.value = localStorage.getItem("user_llm7_key") || "";
+        // Load saved API keys from cached settings
+        userOpenRouterKey.value = cachedSettings.user_openrouter_key || "";
+        userGroqKey.value = cachedSettings.user_groq_key || "";
+        userOpenAIKey.value = cachedSettings.user_openai_key || "";
+        userGeminiKey.value = cachedSettings.user_gemini_key || "";
+        userDeepSeekKey.value = cachedSettings.user_deepseek_key || "";
+        userLlm7Key.value = cachedSettings.user_llm7_key || "";
 
         settingsModal.classList.remove("hidden");
         userLlm7Key.focus();
@@ -315,18 +356,80 @@ document.addEventListener("DOMContentLoaded", () => {
     settingsForm.addEventListener("submit", (e) => {
         e.preventDefault();
 
-        // Save values to localStorage
-        localStorage.setItem("user_openrouter_key", userOpenRouterKey.value.trim());
-        localStorage.setItem("user_groq_key", userGroqKey.value.trim());
-        localStorage.setItem("user_openai_key", userOpenAIKey.value.trim());
-        localStorage.setItem("user_gemini_key", userGeminiKey.value.trim());
-        localStorage.setItem("user_deepseek_key", userDeepSeekKey.value.trim());
-        localStorage.setItem("user_llm7_key", userLlm7Key.value.trim());
+        // Save to cache
+        cachedSettings.user_openrouter_key = userOpenRouterKey.value.trim();
+        cachedSettings.user_groq_key = userGroqKey.value.trim();
+        cachedSettings.user_openai_key = userOpenAIKey.value.trim();
+        cachedSettings.user_gemini_key = userGeminiKey.value.trim();
+        cachedSettings.user_deepseek_key = userDeepSeekKey.value.trim();
+        cachedSettings.user_llm7_key = userLlm7Key.value.trim();
+
+        // Save values to localStorage (for web mode)
+        localStorage.setItem("user_openrouter_key", cachedSettings.user_openrouter_key);
+        localStorage.setItem("user_groq_key", cachedSettings.user_groq_key);
+        localStorage.setItem("user_openai_key", cachedSettings.user_openai_key);
+        localStorage.setItem("user_gemini_key", cachedSettings.user_gemini_key);
+        localStorage.setItem("user_deepseek_key", cachedSettings.user_deepseek_key);
+        localStorage.setItem("user_llm7_key", cachedSettings.user_llm7_key);
+
+        // Save values to Desktop (for desktop mode)
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_settings) {
+            window.pywebview.api.save_settings(cachedSettings)
+                .then(res => {
+                    if (!res || !res.success) {
+                        console.error("Failed to save settings on desktop:", res ? res.error : "Unknown error");
+                    }
+                })
+                .catch(err => {
+                    console.error("Desktop save settings error:", err);
+                });
+        }
 
         updateProviderDropdown();
         closeSettingsModal();
         showToast("API Settings saved successfully!", "success");
     });
+
+    // -------------------------------------------------------------
+    // Onboarding Guide Modal Logic
+    // -------------------------------------------------------------
+
+    const showGuide = () => {
+        // Load checkbox state
+        const dontShow = localStorage.getItem("dont_show_guide") === "true";
+        chkDontShowGuide.checked = dontShow;
+        guideModal.classList.remove("hidden");
+    };
+
+    const closeGuide = () => {
+        if (chkDontShowGuide.checked) {
+            localStorage.setItem("dont_show_guide", "true");
+        } else {
+            localStorage.removeItem("dont_show_guide");
+        }
+        guideModal.classList.add("hidden");
+    };
+
+    // Close buttons
+    if (btnCloseGuide) btnCloseGuide.addEventListener("click", closeGuide);
+    if (btnStartExploring) btnStartExploring.addEventListener("click", closeGuide);
+
+    // Click outside to close
+    guideModal.addEventListener("click", (e) => {
+        if (e.target === guideModal) {
+            closeGuide();
+        }
+    });
+
+    // Floating Help Button
+    if (btnFloatingHelp) {
+        btnFloatingHelp.addEventListener("click", showGuide);
+    }
+
+    // Auto-show guide modal on load if "dont_show_guide" is not true
+    if (localStorage.getItem("dont_show_guide") !== "true") {
+        setTimeout(showGuide, 800);
+    }
 
     // -------------------------------------------------------------
     // Suggestion Cards Logic
@@ -361,6 +464,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const urls = urlsText.split("\n").map(u => u.trim()).filter(u => u);
         if (urls.length === 0) return;
 
+        // Validation for Google Drive and missing keys
+        const driveRegex = /(drive\.google\.com|docs\.google\.com)/i;
+        const hasDriveLinks = urls.some(url => driveRegex.test(url));
+        if (hasDriveLinks) {
+            const hasApiKey = (cachedSettings.user_gemini_key && cachedSettings.user_gemini_key.trim()) || 
+                             (cachedSettings.user_openai_key && cachedSettings.user_openai_key.trim());
+            if (!hasApiKey) {
+                showToast("Google Drive links require a Gemini or OpenAI API Key to transcribe audio. Please configure your key in Settings first.", "error");
+                return;
+            }
+        }
+
         // UI Feedback - Spinner and Disable
         btnIngest.disabled = true;
         ingestSpinner.classList.remove("hidden");
@@ -378,9 +493,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             const provider = document.getElementById("ingest-provider-select").value;
-            const openAiKey = localStorage.getItem("user_openai_key");
-            const geminiKey = localStorage.getItem("user_gemini_key");
-            const openRouterKey = localStorage.getItem("user_openrouter_key");
+            const openAiKey = cachedSettings.user_openai_key;
+            const geminiKey = cachedSettings.user_gemini_key;
+            const openRouterKey = cachedSettings.user_openrouter_key;
 
             if (urls.length === 1) {
                 // Single Video Ingestion
@@ -686,12 +801,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 "Content-Type": "application/json"
             };
 
-            const openRouterKey = localStorage.getItem("user_openrouter_key");
-            const groqKey = localStorage.getItem("user_groq_key");
-            const openAiKey = localStorage.getItem("user_openai_key");
-            const geminiKey = localStorage.getItem("user_gemini_key");
-            const deepseekKey = localStorage.getItem("user_deepseek_key");
-            const llm7Key = localStorage.getItem("user_llm7_key");
+            const openRouterKey = cachedSettings.user_openrouter_key;
+            const groqKey = cachedSettings.user_groq_key;
+            const openAiKey = cachedSettings.user_openai_key;
+            const geminiKey = cachedSettings.user_gemini_key;
+            const deepseekKey = cachedSettings.user_deepseek_key;
+            const llm7Key = cachedSettings.user_llm7_key;
 
             if (openRouterKey) headers["X-Openrouter-Key"] = openRouterKey;
             if (groqKey) headers["X-Groq-Key"] = groqKey;
@@ -1169,13 +1284,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const provider = providerSelect.value;
             const model = modelSelect.value;
 
-            // Get keys from local storage
-            const openAiKey = localStorage.getItem("user_openai_key");
-            const geminiKey = localStorage.getItem("user_gemini_key");
-            const groqKey = localStorage.getItem("user_groq_key");
-            const deepseekKey = localStorage.getItem("user_deepseek_key");
-            const openRouterKey = localStorage.getItem("user_openrouter_key");
-            const llm7Key = localStorage.getItem("user_llm7_key");
+            // Get keys from cached settings
+            const openAiKey = cachedSettings.user_openai_key;
+            const geminiKey = cachedSettings.user_gemini_key;
+            const groqKey = cachedSettings.user_groq_key;
+            const deepseekKey = cachedSettings.user_deepseek_key;
+            const openRouterKey = cachedSettings.user_openrouter_key;
+            const llm7Key = cachedSettings.user_llm7_key;
 
             const url = `${API_BASE}/api/videos/${encodeURIComponent(videoId)}/export?project_id=${encodeURIComponent(currentProjectId)}&use_ai=${useAI}&provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`;
 
@@ -1248,19 +1363,60 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
 
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = downloadUrl;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(downloadUrl);
+                // Helper to save file either using pywebview native API or standard browser download
+                const saveFile = (fileBlob, downloadFilename) => {
+                    return new Promise((resolve, reject) => {
+                        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_file_dialog) {
+                            const reader = new FileReader();
+                            reader.onloadend = async function() {
+                                const base64data = reader.result;
+                                try {
+                                    const res = await window.pywebview.api.save_file_dialog(base64data, downloadFilename);
+                                    if (res && res.success) {
+                                        resolve(res);
+                                    } else {
+                                        const err = new Error(res ? res.error : "Failed to save file.");
+                                        err.isCancellation = (res && res.error && res.error.toLowerCase().includes("cancel"));
+                                        reject(err);
+                                    }
+                                } catch (e) {
+                                    reject(e);
+                                }
+                            };
+                            reader.onerror = () => reject(new Error("Failed to read file blob."));
+                            reader.readAsDataURL(fileBlob);
+                        } else {
+                            try {
+                                const downloadUrl = window.URL.createObjectURL(fileBlob);
+                                const a = document.createElement("a");
+                                a.href = downloadUrl;
+                                a.download = downloadFilename;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                window.URL.revokeObjectURL(downloadUrl);
+                                resolve({ success: true });
+                            } catch (e) {
+                                reject(e);
+                            }
+                        }
+                    });
+                };
+
+                try {
+                    await saveFile(blob, filename);
+                    showToast(`Downloaded: ${filename}`, "success");
+                } catch (saveErr) {
+                    if (saveErr.isCancellation) {
+                        showToast("Save cancelled.", "info");
+                    } else {
+                        throw saveErr;
+                    }
+                }
 
                 btn.disabled = false;
                 btn.innerHTML = originalText;
                 if (actionsGroup) actionsGroup.classList.remove("loading");
-                showToast(`Downloaded: ${filename}`, "success");
             };
 
             await makeExportRequest();

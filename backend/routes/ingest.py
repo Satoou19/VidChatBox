@@ -2,6 +2,7 @@
 
 import os
 import re
+import json
 import hashlib
 import traceback
 from typing import List, Optional
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 from backend.pipeline.downloader import VideoDownloader
 from backend.pipeline.processor import TranscriptProcessor
 from backend.pipeline.project_manager import get_project_dir
+from backend.pipeline.transcriber import AudioTranscriber
 from backend.rag.vector_store import LocalVectorStore
 from backend.services.embedding import resolve_embedding_provider
 from backend.task_store import TaskStore
@@ -22,6 +24,183 @@ router = APIRouter(prefix="/api", tags=["ingest"])
 DATA_DIR = os.getenv("DATA_DIR", "./backend/data")
 ingestion_tasks = TaskStore(os.path.join(DATA_DIR, "tasks_ingestion.json"))
 batch_tasks = TaskStore(os.path.join(DATA_DIR, "tasks_batch.json"))
+
+
+# ------------------------------------------------------------------
+# Google Drive Ingestion Helpers
+# ------------------------------------------------------------------
+
+def get_google_drive_file_id(url: str) -> Optional[str]:
+    """Extracts Google Drive file ID from a shareable link."""
+    patterns = [
+        r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)',
+        r'drive\.google\.com/open\?id=([a-zA-Z0-9_-]+)',
+        r'drive\.google\.com/uc\?id=([a-zA-Z0-9_-]+)',
+        r'docs\.google\.com/file/d/([a-zA-Z0-9_-]+)'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def download_google_drive_file(file_id: str, destination: str, progress_callback=None) -> str:
+    """Downloads a public Google Drive file (supporting files > 100MB by bypassing warning page)"""
+    import requests
+    url = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+
+    if progress_callback:
+        progress_callback("connecting_to_drive", 10)
+
+    # Step 1: Send request to get confirmation token if it is a large file
+    response = session.get(url, params={'id': file_id}, stream=True)
+    
+    token = None
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
+            
+    # Step 2: Re-request with confirm token if present
+    if token:
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(url, params=params, stream=True)
+        
+    if response.status_code != 200:
+        raise Exception(f"Failed to download file from Google Drive. HTTP Status: {response.status_code}")
+
+    # Extract filename from headers if possible
+    disposition = response.headers.get("Content-Disposition", "")
+    filename = "downloaded_file.mp4"
+    if "filename=" in disposition:
+        matches = re.findall(r'filename="?([^";\n]+)"?', disposition)
+        if matches:
+            filename = matches[0]
+
+    # Content length for progress calculation
+    total_length = response.headers.get('content-length')
+    
+    if progress_callback:
+        progress_callback("downloading_from_drive", 20)
+
+    # Save to file
+    with open(destination, "wb") as f:
+        if total_length is None:
+            f.write(response.content)
+        else:
+            dl = 0
+            total_length = int(total_length)
+            for chunk in response.iter_content(chunk_size=40960):
+                dl += len(chunk)
+                f.write(chunk)
+                if progress_callback:
+                    # Let downloading take up to 60% of progress
+                    percent = int(20 + (dl / total_length) * 40)
+                    progress_callback(f"downloading_from_drive ({percent}%)", percent)
+                    
+    return filename
+
+
+def process_google_drive_ingestion(
+    url: str,
+    drive_id: str,
+    project_dir: str,
+    gemini_key: str = None,
+    openai_key: str = None,
+    progress_callback=None
+) -> dict:
+    """Handles the complete Google Drive download and ASR transcription pipeline."""
+    # Setup paths
+    temp_dir = os.path.join(project_dir, "temp_downloads")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_filepath = os.path.join(temp_dir, f"drive_{drive_id}")
+    real_filepath = temp_filepath
+
+    try:
+        # Download
+        drive_filename = download_google_drive_file(drive_id, temp_filepath, progress_callback=progress_callback)
+        
+        # Ensure we have a valid media extension for Google Generative AI to detect the MIME type
+        supported_exts = {'.mp4', '.mp3', '.wav', '.mov', '.avi', '.mkv', '.webm', '.m4a', '.aac', '.flac', '.ogg'}
+        _, ext = os.path.splitext(drive_filename)
+        ext = ext.lower()
+        if ext not in supported_exts:
+            ext = ".mp4"  # Default to mp4 if unsupported or missing
+
+        real_filepath = temp_filepath + ext
+        if os.path.exists(temp_filepath):
+            if os.path.exists(real_filepath):
+                try:
+                    os.remove(real_filepath)
+                except:
+                    pass
+            os.rename(temp_filepath, real_filepath)
+
+        clean_title = os.path.splitext(drive_filename)[0]
+        clean_title = re.sub(r'[_\-\s]+', ' ', clean_title).strip()
+        if not clean_title:
+            clean_title = f"Drive Video {drive_id}"
+
+        # Transcription provider auto-resolution
+        t_provider = None
+        if gemini_key and gemini_key.strip():
+            t_provider = "gemini"
+        elif openai_key and openai_key.strip():
+            t_provider = "openai"
+        else:
+            g_env = os.getenv("GEMINI_API_KEY")
+            o_env = os.getenv("OPENAI_API_KEY")
+            if g_env and g_env.strip():
+                t_provider = "gemini"
+            elif o_env and o_env.strip():
+                t_provider = "openai"
+            else:
+                raise ValueError(
+                    "No transcription API Key provided. Google Drive videos require a "
+                    "Gemini or OpenAI API Key to generate subtitles."
+                )
+
+        transcriber = AudioTranscriber(
+            gemini_api_key=gemini_key,
+            openai_api_key=openai_key
+        )
+        
+        def trans_progress_cb(status, pct):
+            # Map transcription progress (from 60% to 80%)
+            mapped_pct = int(60 + (pct / 100.0) * 20)
+            if progress_callback:
+                progress_callback(f"transcribing ({status})", mapped_pct)
+
+        if progress_callback:
+            progress_callback("transcribing", 60)
+            
+        segments = transcriber.transcribe(
+            audio_path=real_filepath,
+            provider=t_provider,
+            progress_callback=trans_progress_cb
+        )
+
+        sub_info = {
+            "id": f"drive_{drive_id}",
+            "title": clean_title,
+            "duration": segments[-1]["end"] if segments else 0.0,
+            "uploader": "Google Drive",
+            "webpage_url": url,
+            "extractor": "google_drive",
+            "segments": segments
+        }
+        return sub_info
+
+    finally:
+        # Clean up local files
+        for path in (temp_filepath, real_filepath):
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as e:
+                print(f"Warning: Failed to delete file {path}: {e}")
 
 
 # ------------------------------------------------------------------
@@ -66,36 +245,86 @@ def run_ingestion_pipeline(
         proj_processor = TranscriptProcessor(data_dir=project_dir)
         proj_vector_store = LocalVectorStore(data_dir=project_dir)
 
-        # Step 1: Extract info and download subtitles directly
-        ingestion_tasks.update(task_id, {
-            "status": "extracting_metadata",
-            "percent": 20.0,
-            "title": "Extracting metadata and subtitles...",
-            "current_video_title": url,
-            "current_video_status": "extracting_metadata",
-            "current_video_percent": 20.0,
-            "overall_percent": 20.0,
-            "error": None,
-        })
-        ingestion_tasks.update_nested(task_id, ["videos", 0], {
-            "status": "extracting_metadata",
-            "percent": 20.0,
-        })
+        # Step 1: Download and extract transcript segments
+        drive_id = get_google_drive_file_id(url)
+        if drive_id:
+            # Check for API key before downloading
+            has_api_key = (
+                (gemini_key and gemini_key.strip())
+                or (openai_key and openai_key.strip())
+                or os.getenv("GEMINI_API_KEY")
+                or os.getenv("OPENAI_API_KEY")
+            )
+            if not has_api_key:
+                raise ValueError("API Key for Gemini or OpenAI is required to transcribe Google Drive files.")
 
-        def sub_progress(status, pct):
             ingestion_tasks.update(task_id, {
-                "status": status,
-                "percent": pct,
-                "current_video_status": status,
-                "current_video_percent": pct,
-                "overall_percent": pct,
+                "status": "downloading_from_drive",
+                "percent": 10.0,
+                "title": "Connecting to Google Drive...",
+                "current_video_title": url,
+                "current_video_status": "downloading_from_drive",
+                "current_video_percent": 10.0,
+                "overall_percent": 10.0,
+                "error": None,
             })
             ingestion_tasks.update_nested(task_id, ["videos", 0], {
-                "status": status,
-                "percent": pct,
+                "status": "downloading_from_drive",
+                "percent": 10.0,
             })
 
-        sub_info = proj_downloader.download_subtitles(url, progress_callback=sub_progress)
+            def drive_progress(status, pct):
+                ingestion_tasks.update(task_id, {
+                    "status": status,
+                    "percent": pct,
+                    "current_video_status": status,
+                    "current_video_percent": pct,
+                    "overall_percent": pct,
+                })
+                ingestion_tasks.update_nested(task_id, ["videos", 0], {
+                    "status": status,
+                    "percent": pct,
+                })
+
+            sub_info = process_google_drive_ingestion(
+                url=url,
+                drive_id=drive_id,
+                project_dir=project_dir,
+                gemini_key=gemini_key,
+                openai_key=openai_key,
+                progress_callback=drive_progress
+            )
+        else:
+            ingestion_tasks.update(task_id, {
+                "status": "extracting_metadata",
+                "percent": 20.0,
+                "title": "Extracting metadata and subtitles...",
+                "current_video_title": url,
+                "current_video_status": "extracting_metadata",
+                "current_video_percent": 20.0,
+                "overall_percent": 20.0,
+                "error": None,
+            })
+            ingestion_tasks.update_nested(task_id, ["videos", 0], {
+                "status": "extracting_metadata",
+                "percent": 20.0,
+            })
+
+            def sub_progress(status, pct):
+                ingestion_tasks.update(task_id, {
+                    "status": status,
+                    "percent": pct,
+                    "current_video_status": status,
+                    "current_video_percent": pct,
+                    "overall_percent": pct,
+                })
+                ingestion_tasks.update_nested(task_id, ["videos", 0], {
+                    "status": status,
+                    "percent": pct,
+                })
+
+            sub_info = proj_downloader.download_subtitles(url, progress_callback=sub_progress)
+
         video_id = sub_info["id"]
         title = sub_info["title"]
         segments = sub_info["segments"]
@@ -203,19 +432,52 @@ def run_batch_ingestion_pipeline(
         })
 
         try:
-            # Download subtitles
-            def sub_progress(status, pct, _idx=idx):
-                batch_tasks.update(batch_task_id, {
-                    "current_video_status": status,
-                    "current_video_percent": pct,
-                    "overall_percent": ((_idx + (pct / 100.0 * 0.7)) / len(urls)) * 100,
-                })
-                batch_tasks.update_nested(batch_task_id, ["videos", _idx], {
-                    "status": status,
-                    "percent": pct,
-                })
+            drive_id = get_google_drive_file_id(url)
+            if drive_id:
+                # Double-check API key in batch loop too
+                has_api_key = (
+                    (gemini_key and gemini_key.strip())
+                    or (openai_key and openai_key.strip())
+                    or os.getenv("GEMINI_API_KEY")
+                    or os.getenv("OPENAI_API_KEY")
+                )
+                if not has_api_key:
+                    raise ValueError("API Key for Gemini or OpenAI is required to transcribe Google Drive files.")
 
-            sub_info = proj_downloader.download_subtitles(url, progress_callback=sub_progress)
+                def drive_progress(status, pct, _idx=idx):
+                    batch_tasks.update(batch_task_id, {
+                        "current_video_status": status,
+                        "current_video_percent": pct,
+                        "overall_percent": ((_idx + (pct / 100.0 * 0.7)) / len(urls)) * 100,
+                    })
+                    batch_tasks.update_nested(batch_task_id, ["videos", _idx], {
+                        "status": status,
+                        "percent": pct,
+                    })
+
+                sub_info = process_google_drive_ingestion(
+                    url=url,
+                    drive_id=drive_id,
+                    project_dir=project_dir,
+                    gemini_key=gemini_key,
+                    openai_key=openai_key,
+                    progress_callback=drive_progress
+                )
+            else:
+                # Download subtitles
+                def sub_progress(status, pct, _idx=idx):
+                    batch_tasks.update(batch_task_id, {
+                        "current_video_status": status,
+                        "current_video_percent": pct,
+                        "overall_percent": ((_idx + (pct / 100.0 * 0.7)) / len(urls)) * 100,
+                    })
+                    batch_tasks.update_nested(batch_task_id, ["videos", _idx], {
+                        "status": status,
+                        "percent": pct,
+                    })
+
+                sub_info = proj_downloader.download_subtitles(url, progress_callback=sub_progress)
+
             video_id = sub_info["id"]
             title = sub_info["title"]
             segments = sub_info["segments"]
@@ -302,6 +564,21 @@ def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
     if not clean_url:
         raise HTTPException(status_code=400, detail="URL cannot be empty")
 
+    # Validate API key for Google Drive videos
+    drive_id = get_google_drive_file_id(clean_url)
+    if drive_id:
+        has_api_key = (
+            (req.gemini_key and req.gemini_key.strip())
+            or (req.openai_key and req.openai_key.strip())
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
+        if not has_api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Google Drive video ingestion requires a Gemini or OpenAI API Key to generate subtitles. Please configure an API Key in the Settings modal first."
+            )
+
     # Generate stable task ID from URL hash to avoid duplicate ingestion tasks
     url_hash = hashlib.md5(clean_url.encode("utf-8")).hexdigest()
     task_id = f"task_{url_hash}"
@@ -344,6 +621,21 @@ def start_batch_ingest(req: BatchIngestRequest, background_tasks: BackgroundTask
     urls = [url.strip(" \t\n\r\"'[]") for url in req.urls if url.strip(" \t\n\r\"'[]")]
     if not urls:
         raise HTTPException(status_code=400, detail="No valid URLs provided")
+
+    # Validate API key for Google Drive videos in batch
+    has_drive_links = any(get_google_drive_file_id(url) is not None for url in urls)
+    if has_drive_links:
+        has_api_key = (
+            (req.gemini_key and req.gemini_key.strip())
+            or (req.openai_key and req.openai_key.strip())
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
+        if not has_api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="One or more Google Drive videos require a Gemini or OpenAI API Key to generate subtitles. Please configure an API Key in the Settings modal first."
+            )
 
     # Generate batch task ID
     urls_str = ",".join(urls)

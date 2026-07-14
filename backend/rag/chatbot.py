@@ -88,6 +88,7 @@ class RAGChatbot:
             "2. Place the citation link directly next to the statement or paragraph it refers to.\n"
             "3. Use ONLY the exact citation URLs provided in the context. DO NOT construct or alter URLs yourself.\n"
             "4. Example: 'The streamer mentioned that he prefers character builds with high crit rate [01:23:45](https://youtube.com/...&t=5025).'\n"
+            "5. If the question is in vietnamese, answer in vietnamese. If the question is in english, answer in english.\n\n   "
         )
         
         if persona_mode == "streamer":

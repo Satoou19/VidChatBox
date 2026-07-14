@@ -6,11 +6,32 @@ All business logic lives in backend/routes/ and backend/services/.
 """
 
 import os
+import sys
+from dotenv import load_dotenv
+
+# ------------------------------------------------------------------
+# PyInstaller Helper for Desktop Mode
+# ------------------------------------------------------------------
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Resolve to root workspace directory (parent of backend/)
+        base_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    return os.path.join(base_path, relative_path)
+
+if getattr(sys, 'frozen', False):
+    # Change current working directory to the directory of the executable
+    os.chdir(os.path.dirname(sys.executable))
+
+# Load environment variables from the CWD (now set to exe directory if frozen)
+load_dotenv(override=True)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
 
 from backend.pipeline.project_manager import create_project
 from backend.rate_limiter import RateLimitMiddleware
@@ -63,5 +84,6 @@ create_project("default")
 # Static files (must be last — catch-all mount)
 # ------------------------------------------------------------------
 
-os.makedirs("./frontend", exist_ok=True)
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+frontend_dir = get_resource_path("frontend")
+os.makedirs(frontend_dir, exist_ok=True)
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

@@ -611,20 +611,42 @@ body {
 
 .chat-header .header-settings {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
 }
 
 .chat-header .setting-group {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
 }
 
 .chat-header .setting-group label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.chat-header #provider-select {
+    max-width: 110px;
+}
+
+.chat-header #model-select {
+    max-width: 165px;
+}
+
+.chat-header #persona-select {
+    max-width: 125px;
+}
+
+@media (max-width: 1150px) {
+    .chat-header .setting-group label {
+        display: none; /* Hide labels like "AI ENGINE", "AI MODEL", etc. on narrower screens */
+    }
+    .chat-header .header-settings {
+        gap: 0.5rem;
+    }
 }
 
 /* Chat Main Layout */
@@ -1511,5 +1533,50 @@ body {
 @keyframes pulse-loading {
     0%, 100% { opacity: 0.5; }
     50% { opacity: 1; }
+}
+
+/* Onboarding Guide Modal & Floating Help Button */
+.btn-floating-help {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: var(--transition-smooth);
+    z-index: 99;
+}
+
+.btn-floating-help:hover {
+    transform: scale(1.1) rotate(10deg);
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6);
+}
+
+.guide-modal-content {
+    background: rgba(17, 25, 40, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-premium);
+}
+
+.guide-step {
+    transition: var(--transition-smooth);
+}
+
+.guide-step:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    transform: translateX(4px);
 }
 

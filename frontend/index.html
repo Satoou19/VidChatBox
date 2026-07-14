@@ -224,11 +224,11 @@
             </div>
             <form id="ingest-form" class="ingest-form">
                 <div class="form-group">
-                    <label for="vod-urls">YouTube Video URL(s)</label>
+                    <label for="vod-urls">YouTube or Google Drive URL(s)</label>
                     <div class="input-wrapper">
-                        <textarea id="vod-urls" placeholder="Paste YouTube URL(s) - one URL per line for batch processing" required></textarea>
+                        <textarea id="vod-urls" placeholder="Paste YouTube or Google Drive shareable link(s) - one URL per line. (Google Drive links require a Gemini or OpenAI API Key to transcribe)" required></textarea>
                     </div>
-                    <span class="form-tip">We will extract the official transcripts or auto-captions and save them to the project database.</span>
+                    <span class="form-tip">We will extract YouTube transcripts or download & transcribe Google Drive videos (using a configured Gemini or OpenAI key) and index them in the database.</span>
                 </div>
                 <div class="form-group">
                     <label for="ingest-provider-select">Search/Embedding Method</label>
@@ -350,6 +350,75 @@
             </ul>
         </div>
     </div>
+
+    <!-- Guide Modal Dialog (Glassmorphism overlay) -->
+    <div id="guide-modal" class="modal-overlay hidden">
+        <div class="modal-content glass guide-modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>🔮 Welcome to VidChatBox!</h2>
+                <button type="button" id="btn-close-guide" class="btn-close" title="Close Guide">&times;</button>
+            </div>
+            <div class="guide-body">
+                <p style="margin-bottom: 1.25rem; font-size: 0.95rem; color: var(--text-secondary); line-height: 1.5;">
+                    VidChatBox là công cụ đàm thoại và phân tích phụ đề Video thông minh. Dưới đây là hướng dẫn nhanh để bạn bắt đầu sử dụng các tính năng chính:
+                </p>
+                <div class="guide-steps" style="display: flex; flex-direction: column; gap: 1rem; max-height: 380px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 1.5rem;">
+                    
+                    <div class="guide-step" style="display: flex; gap: 1rem; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 0.5rem; border-left: 3px solid var(--accent-purple);">
+                        <div class="guide-step-icon" style="font-size: 1.5rem;">📥</div>
+                        <div class="guide-step-content">
+                            <h4 style="color: var(--text-primary); margin-bottom: 0.25rem;">1. Nạp dữ liệu Video (Ingest VIDs)</h4>
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                Nhấn nút <strong>"+"</strong> ở góc ô nhập liệu hoặc nút Ingest trong danh sách nhóm để dán link **YouTube** hoặc **Google Drive**. Hệ thống sẽ tự động trích xuất phụ đề hoặc chuyển giọng nói thành văn bản.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="guide-step" style="display: flex; gap: 1rem; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 0.5rem; border-left: 3px solid var(--text-warning);">
+                        <div class="guide-step-icon" style="font-size: 1.5rem;">⚙️</div>
+                        <div class="guide-step-content">
+                            <h4 style="color: var(--text-primary); margin-bottom: 0.25rem;">2. Cấu hình API Key</h4>
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                Nhấn biểu tượng bánh răng <strong>Settings (⚙️)</strong> ở góc trái để cấu hình API Key của bạn (Gemini, OpenAI, OpenRouter...). API Key được lưu an toàn tại bộ nhớ trình duyệt của riêng bạn.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="guide-step" style="display: flex; gap: 1rem; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 0.5rem; border-left: 3px solid var(--text-success);">
+                        <div class="guide-step-icon" style="font-size: 1.5rem;">💬</div>
+                        <div class="guide-step-content">
+                            <h4 style="color: var(--text-primary); margin-bottom: 0.25rem;">3. Đàm thoại & Trích dẫn</h4>
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                Đặt câu hỏi trong ô chat, mô hình AI sẽ trả lời dựa trên nội dung video kèm theo các **mốc thời gian trích dẫn (citations)**. Bạn có thể click vào mốc để phát đoạn video tương ứng.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="guide-step" style="display: flex; gap: 1rem; background: rgba(255, 255, 255, 0.03); padding: 0.75rem 1rem; border-radius: 0.5rem; border-left: 3px solid var(--accent-blue);">
+                        <div class="guide-step-icon" style="font-size: 1.5rem;">✨</div>
+                        <div class="guide-step-content">
+                            <h4 style="color: var(--text-primary); margin-bottom: 0.25rem;">4. Tải phụ đề & Tinh chỉnh</h4>
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+                                Tải bản dịch phụ đề thô (Raw MD) hoặc dùng AI để tự động sửa lỗi chính tả, tóm tắt và định dạng thành bài viết chỉn chu (AI Summary / Polish MD).
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <div class="guide-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+                    <label class="custom-checkbox" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-muted); cursor: pointer;">
+                        <input type="checkbox" id="chk-dont-show-guide" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-purple);">
+                        Không hiển thị lại hướng dẫn
+                    </label>
+                    <button type="button" id="btn-start-exploring" class="btn btn-primary" style="padding: 0.5rem 1.25rem;">Bắt đầu Khám phá!</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Help Button -->
+    <button type="button" id="btn-floating-help" class="btn-floating-help" title="Xem hướng dẫn sử dụng">?</button>
 
     <!-- Main JS Application -->
     <script src="js/app.js?v=1.0.3"></script>

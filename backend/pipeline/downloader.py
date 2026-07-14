@@ -116,54 +116,59 @@ class VideoDownloader:
             except Exception as e:
                 print(f"Warning: Failed to load cookies for youtube-transcript-api: {e}")
                 
-        proxies = self._get_youtube_proxies()
-        random.shuffle(proxies)
-        
-        data = None
-        last_err = None
         pref_langs = ['vi', 'en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'fr', 'de', 'es']
+        data = None
+        direct_err = None
         
-        for idx, proxy in enumerate(proxies, start=1):
-            if progress_callback:
-                progress_callback(f"rotating_proxy_{idx}", 50)
-            session.proxies = {
-                "http": proxy,
-                "https": proxy
-            }
+        # 1. Try direct fetch first
+        if progress_callback:
+            progress_callback("fetching_transcript_api_direct", 50)
+        try:
+            api = YouTubeTranscriptApi(http_client=session)
+            transcript_list = api.list(video_id)
             try:
-                api = YouTubeTranscriptApi(http_client=session)
-                transcript_list = api.list(video_id)
+                transcript = transcript_list.find_transcript(pref_langs)
+            except Exception:
                 try:
-                    transcript = transcript_list.find_transcript(pref_langs)
-                except Exception:
-                    try:
-                        transcript = next(iter(transcript_list))
-                    except StopIteration:
-                        raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
-                data = transcript.fetch()
-                break
-            except Exception as e:
-                print(f"Warning: youtube-transcript-api failed with proxy {proxy}: {e}. Trying next proxy...")
-                last_err = e
-                
+                    transcript = next(iter(transcript_list))
+                except StopIteration:
+                    raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
+            data = transcript.fetch()
+        except Exception as de:
+            print(f"Direct youtube-transcript-api failed: {de}. Trying proxies...")
+            direct_err = de
+            
+        # 2. Try proxies if direct fails
         if not data:
-            session.proxies = {}
-            if progress_callback:
-                progress_callback("fetching_transcript_api_direct", 55)
-            try:
-                api = YouTubeTranscriptApi(http_client=session)
-                transcript_list = api.list(video_id)
+            proxies = self._get_youtube_proxies()
+            random.shuffle(proxies)
+            last_err = None
+            
+            for idx, proxy in enumerate(proxies, start=1):
+                if progress_callback:
+                    progress_callback(f"rotating_proxy_{idx}", 55)
+                session.proxies = {
+                    "http": proxy,
+                    "https": proxy
+                }
                 try:
-                    transcript = transcript_list.find_transcript(pref_langs)
-                except Exception:
+                    api = YouTubeTranscriptApi(http_client=session)
+                    transcript_list = api.list(video_id)
                     try:
-                        transcript = next(iter(transcript_list))
-                    except StopIteration:
-                        raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
-                data = transcript.fetch()
-            except Exception as direct_err:
-                print(f"Error: youtube-transcript-api direct retry failed: {direct_err}")
-                raise Exception(f"Failed to fetch transcripts (all proxies & direct failed). Last proxy error: {last_err or 'None'}. Direct error: {direct_err}")
+                        transcript = transcript_list.find_transcript(pref_langs)
+                    except Exception:
+                        try:
+                            transcript = next(iter(transcript_list))
+                        except StopIteration:
+                            raise FileNotFoundError("Video does not have any manual subtitles or auto-captions available.")
+                    data = transcript.fetch()
+                    break
+                except Exception as e:
+                    print(f"Warning: youtube-transcript-api failed with proxy {proxy}: {e}. Trying next proxy...")
+                    last_err = e
+                    
+            if not data:
+                raise Exception(f"Failed to fetch transcripts (direct & all proxies failed). Direct error: {direct_err}. Last proxy error: {last_err or 'None'}")
         
         segments = []
         for seg in data:
@@ -460,7 +465,7 @@ class VideoDownloader:
         return deduped
 
     def extract_info(self, url):
-        """Extracts video metadata using yt-dlp, rotating proxies if they fail, and falling back to direct."""
+        """Extracts video metadata using yt-dlp, trying direct first, and falling back to rotating proxies."""
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -476,31 +481,36 @@ class VideoDownloader:
         if cookie_file:
             ydl_opts['cookiefile'] = cookie_file
             
-        proxies = self._get_youtube_proxies()
-        import random
-        random.shuffle(proxies)
-        
-        last_err = None
         info = None
+        direct_err = None
         
-        for proxy in proxies:
-            ydl_opts['proxy'] = proxy
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                break
-            except Exception as e:
-                print(f"Warning: yt-dlp extract_info failed with proxy {proxy}: {e}. Trying next proxy...")
-                last_err = e
-                
+        # 1. Try direct first
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as de:
+            print(f"Direct yt-dlp extract_info failed: {de}. Trying proxies...")
+            direct_err = de
+            
+        # 2. Try proxies if direct fails
         if not info:
-            if 'proxy' in ydl_opts:
-                del ydl_opts['proxy']
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-            except Exception as direct_err:
-                raise Exception(f"Failed to extract video info (all proxies & direct failed). Last proxy error: {last_err or 'None'}. Direct error: {direct_err}")
+            proxies = self._get_youtube_proxies()
+            import random
+            random.shuffle(proxies)
+            last_err = None
+            
+            for proxy in proxies:
+                ydl_opts['proxy'] = proxy
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                    break
+                except Exception as e:
+                    print(f"Warning: yt-dlp extract_info failed with proxy {proxy}: {e}. Trying next proxy...")
+                    last_err = e
+                    
+            if not info:
+                raise Exception(f"Failed to extract video info (direct & all proxies failed). Direct error: {direct_err}. Last proxy error: {last_err or 'None'}")
                 
         title = info.get("title")
         if title:
@@ -521,85 +531,94 @@ class VideoDownloader:
         
         Saves as raw m4a/webm to bypass ffmpeg requirement if missing.
         """
-        # First get info to determine video ID
-        info = self.extract_info(url)
-        video_id = info["id"]
-        
-        # Clean video_id for filename safety
-        video_id = re.sub(r'[^\w\-_]', '', video_id)
-        
-        # Output template: d:\PythonProject\VidChatBox\backend\data\audio\<video_id>
-        output_template = os.path.join(self.audio_dir, f"audio_{video_id}.%(ext)s")
-        
-        # Progress hook for tracking percentage
-        def ydl_hook(d):
-            if d['status'] == 'downloading':
-                # Extract percentage
-                total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
-                downloaded = d.get('downloaded_bytes', 0)
-                percent = (downloaded / total) * 100
-                if progress_callback:
-                    progress_callback("downloading", percent)
-            elif d['status'] == 'finished':
-                if progress_callback:
-                    progress_callback("finished", 100)
-
-        ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': output_template,
-            'progress_hooks': [ydl_hook],
-            'quiet': True,
-            'no_warnings': True,
-            'remote_components': ['ejs:github'],
-            'js_runtimes': {'node': {}, 'deno': {}},
-            'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web', 'tv']}},
-        }
-        
-        cookie_file = self._get_cookiefile_path()
-        if cookie_file:
-            ydl_opts['cookiefile'] = cookie_file
+        try:
+            # First get info to determine video ID
+            info = self.extract_info(url)
+            video_id = info["id"]
             
-        youtube_proxy = self._get_youtube_proxy()
-        if youtube_proxy:
-            ydl_opts['proxy'] = youtube_proxy
+            # Clean video_id for filename safety
+            video_id = re.sub(r'[^\w\-_]', '', video_id)
             
-        # Note: If FFmpeg was available we could do postprocessors, but we intentionally avoid
-        # forcing FFmpeg so that raw m4a/webm works fine.
+            # Output template: d:\PythonProject\VidChatBox\backend\data\audio\<video_id>
+            output_template = os.path.join(self.audio_dir, f"audio_{video_id}.%(ext)s")
+            
+            # Progress hook for tracking percentage
+            def ydl_hook(d):
+                if d['status'] == 'downloading':
+                    # Extract percentage
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
+                    downloaded = d.get('downloaded_bytes', 0)
+                    percent = (downloaded / total) * 100
+                    if progress_callback:
+                        progress_callback("downloading", percent)
+                elif d['status'] == 'finished':
+                    if progress_callback:
+                        progress_callback("finished", 100)
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                download_info = ydl.extract_info(url, download=True)
-                # Find the actual written filename
-                filename = ydl.prepare_filename(download_info)
-                # Ensure the file exists (extension might differ slightly based on bestaudio format downloaded)
-                # e.g., if .webm or .m4a was downloaded, prepare_filename is correct
+            ydl_opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'outtmpl': output_template,
+                'progress_hooks': [ydl_hook],
+                'quiet': True,
+                'no_warnings': True,
+                'remote_components': ['ejs:github'],
+                'js_runtimes': {'node': {}, 'deno': {}},
+                'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web', 'tv']}},
+            }
+            
+            cookie_file = self._get_cookiefile_path()
+            if cookie_file:
+                ydl_opts['cookiefile'] = cookie_file
                 
-                # Double check actual file path on disk
-                base_path, _ = os.path.splitext(filename)
-                actual_path = None
-                for ext in ['m4a', 'webm', 'mp3', 'opus', 'ogg', 'wav']:
-                    test_path = f"{base_path}.{ext}"
-                    if os.path.exists(test_path):
-                        actual_path = test_path
+            # Try direct download first (no proxy)
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    download_info = ydl.extract_info(url, download=True)
+            except Exception as direct_err:
+                youtube_proxy = self._get_youtube_proxy()
+                if youtube_proxy:
+                    print(f"Direct download failed: {direct_err}. Retrying with proxy {youtube_proxy}...")
+                    ydl_opts['proxy'] = youtube_proxy
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            download_info = ydl.extract_info(url, download=True)
+                    except Exception as proxy_err:
+                        raise Exception(f"Failed to download audio (direct & proxy failed). Direct error: {direct_err}. Proxy error: {proxy_err}")
+                else:
+                    raise Exception(f"Failed to download audio: {direct_err}")
+
+            # Find the actual written filename
+            filename = ydl.prepare_filename(download_info)
+            # Ensure the file exists (extension might differ slightly based on bestaudio format downloaded)
+            # e.g., if .webm or .m4a was downloaded, prepare_filename is correct
+            
+            # Double check actual file path on disk
+            base_path, _ = os.path.splitext(filename)
+            actual_path = None
+            for ext in ['m4a', 'webm', 'mp3', 'opus', 'ogg', 'wav']:
+                test_path = f"{base_path}.{ext}"
+                if os.path.exists(test_path):
+                    actual_path = test_path
+                    break
+                    
+            if not actual_path and os.path.exists(filename):
+                actual_path = filename
+            
+            if not actual_path:
+                # Let's search in directory
+                for f in os.listdir(self.audio_dir):
+                    if f.startswith(f"audio_{video_id}"):
+                        actual_path = os.path.join(self.audio_dir, f)
                         break
                         
-                if not actual_path and os.path.exists(filename):
-                    actual_path = filename
+            if not actual_path or not os.path.exists(actual_path):
+                raise FileNotFoundError("Downloaded audio file not found on disk.")
                 
-                if not actual_path:
-                    # Let's search in directory
-                    for f in os.listdir(self.audio_dir):
-                        if f.startswith(f"audio_{video_id}"):
-                            actual_path = os.path.join(self.audio_dir, f)
-                            break
-                            
-                if not actual_path or not os.path.exists(actual_path):
-                    raise FileNotFoundError("Downloaded audio file not found on disk.")
-                    
-                info["audio_path"] = actual_path
-                return info
-            except Exception as e:
-                raise Exception(f"Failed to download audio: {str(e)}")
+            info["audio_path"] = actual_path
+            return info
+        except Exception as e:
+            raise Exception(f"Failed to download audio: {str(e)}")
+
 
 # Quick manual testing block
 if __name__ == "__main__":
